@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Nav from "./nav";
+import AccessGate from "./access-gate";
 import { StoreProvider } from "./store-context";
 import { AuthProvider } from "./auth-context";
 import { LanguageProvider } from "./language-context";
@@ -18,7 +19,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           <AuthProvider>
             <StoreProvider>
               <Nav />
-              <main className="sm:ml-56 px-4 sm:px-6 pb-16 overflow-x-hidden">{children}</main>
+              <main className="sm:ml-56 px-4 sm:px-6 pb-16 overflow-x-hidden">
+                <AccessGate>{children}</AccessGate>
+              </main>
             </StoreProvider>
           </AuthProvider>
         </LanguageProvider>

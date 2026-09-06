@@ -3,8 +3,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { supabase, StoreRow } from "@/lib/supabase";
 import { useAuth } from "./auth-context";
-
-const STORE_LOCKED_ROLES = ["cashier", "online_sale", "wholesale"];
+import { coversAllStores } from "./permissions";
 
 type StoreContextType = {
   storeId: string;
@@ -12,60 +11,53 @@ type StoreContextType = {
   stores: StoreRow[];
   refreshStores: () => Promise<void>;
   isStoreLocked: boolean;
-  warehouses: StoreRow[];
-  defaultWarehouseId: string;
 };
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const { profile } = useAuth();
+  const { profile, stores: allowed } = useAuth();
   const [storeId, setStoreIdState] = useState("");
   const [stores, setStores] = useState<StoreRow[]>([]);
 
-  const isStoreLocked = !!profile && STORE_LOCKED_ROLES.includes(profile.role);
-
-  // Warehouses are just stores flagged as such, so a business can run several
-  const warehouses = stores.filter((s) => s.is_warehouse);
-  const defaultWarehouseId = warehouses[0]?.id || "";
+  // An account with one branch cannot switch away from it; the ledger's
+  // RLS enforces the same scope, so the selector only reflects it.
+  const isStoreLocked = stores.length <= 1;
 
   async function refreshStores() {
-    const { data } = await supabase.from("stores").select("*").eq("is_active", true).order("name");
-    setStores(data || []);
+    if (!profile) {
+      setStores([]);
+      return;
+    }
 
-    // A locked account belongs to exactly one branch, and defaulting to the
-    // first retail store here made pages read the wrong one until the profile
-    // arrived - long enough for a cashier to see another branch's screen.
-    if (isStoreLocked) return;
+    const { data } = await supabase
+      .from("stores")
+      .select("*")
+      .eq("is_active", true)
+      .order("name");
 
-    if (data && data.length > 0 && !storeId) {
-      const firstRetail = data.find((s) => !s.is_warehouse) || data[0];
-      setStoreIdState(firstRetail.id);
+    const rows = (data as StoreRow[]) || [];
+    const visible = coversAllStores(profile)
+      ? rows
+      : rows.filter((s) => allowed.includes(s.id));
+
+    setStores(visible);
+    if (visible.length > 0 && !visible.some((s) => s.id === storeId)) {
+      setStoreIdState(visible[0].id);
     }
   }
 
   useEffect(() => {
     refreshStores();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile?.id]);
-
-  // For cashier/online-sale/wholesale accounts, always pin the store to the one
-  // assigned on their profile — they cannot switch stores.
-  useEffect(() => {
-    if (isStoreLocked && profile?.store_id) {
-      setStoreIdState(profile.store_id);
-    }
-  }, [isStoreLocked, profile?.store_id]);
+  }, [profile?.id, allowed.join(",")]);
 
   function setStoreId(id: string) {
-    if (isStoreLocked) return; // ignore attempts to change store for locked accounts
     setStoreIdState(id);
   }
 
   return (
-    <StoreContext.Provider
-      value={{ storeId, setStoreId, stores, refreshStores, isStoreLocked, warehouses, defaultWarehouseId }}
-    >
+    <StoreContext.Provider value={{ storeId, setStoreId, stores, refreshStores, isStoreLocked }}>
       {children}
     </StoreContext.Provider>
   );

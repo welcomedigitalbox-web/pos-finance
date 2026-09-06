@@ -22,25 +22,58 @@
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
--- 0. accountant role (permissions.ts already knows it, the DB did not)
+-- 0. Finance users
+--
+-- Finance keeps its own accounts. They live in the same Supabase project
+-- as the POS - and therefore in the same auth.users pool - but the POS
+-- `profiles` table plays no part here: a till account with no fin_users
+-- row cannot open this app, and a finance account with no profiles row
+-- cannot open the POS. The two staff lists never mix.
+--
+-- Roles:
+--   fin_admin   - everything, including finance user administration
+--   fin_manager - everything except user administration, all stores
+--   accountant  - the pages granted on their row, the stores assigned
+--   viewer      - read only, no posting
 -- ---------------------------------------------------------------------
-alter table public.profiles drop constraint if exists profiles_role_check;
-alter table public.profiles add constraint profiles_role_check check (
-  role in (
-    'admin', 'owner', 'operation_director',
-    'sale_manager', 'merchandising_manager', 'warehouse_manager',
-    'finance_manager', 'marketing_manager', 'accountant',
-    'manager',
-    'online_sale', 'cashier', 'wholesale'
-  )
+create table if not exists public.fin_users (
+  id          uuid primary key references auth.users(id) on delete cascade,
+  email       text not null unique,
+  name        text,
+  role        text not null default 'accountant'
+              check (role in ('fin_admin','fin_manager','accountant','viewer')),
+  all_stores  boolean not null default false,
+  permissions jsonb not null default '[]'::jsonb,
+  is_active   boolean not null default true,
+  note        text,
+  created_by  text,
+  created_at  timestamptz not null default now()
+);
+
+-- Which branches an accountant may see. Ignored for roles that cover
+-- every store.
+create table if not exists public.fin_user_stores (
+  user_id  uuid not null references public.fin_users(id) on delete cascade,
+  store_id text not null references public.stores(id) on delete cascade,
+  primary key (user_id, store_id)
 );
 
 -- ---------------------------------------------------------------------
--- 1. Who may work in finance
+-- 1. Scope helpers
 --
--- Reading the books is wider than writing them: a store manager sees
--- their own store's vouchers, finance sees everything.
+-- Every one of these reads fin_users only, so nothing in the finance
+-- ledger depends on a POS role.
 -- ---------------------------------------------------------------------
+create or replace function public.fin_my_role()
+returns text
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select role from public.fin_users where id = auth.uid() and is_active;
+$$;
+
 create or replace function public.is_finance()
 returns boolean
 language sql
@@ -48,12 +81,33 @@ stable
 security definer
 set search_path = public, pg_temp
 as $$
-  select public.my_role() in
-    ('admin', 'owner', 'operation_director', 'finance_manager', 'accountant');
+  select public.fin_my_role() is not null;
 $$;
 
-revoke all on function public.is_finance() from public, anon;
-grant execute on function public.is_finance() to authenticated;
+create or replace function public.fin_is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select public.fin_my_role() = 'fin_admin';
+$$;
+
+-- fin_admin and fin_manager cover the whole business; anyone else covers
+-- the branches listed on fin_user_stores, unless all_stores is set.
+create or replace function public.fin_covers_all_stores()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select coalesce(
+    (select role in ('fin_admin','fin_manager') or all_stores
+       from public.fin_users where id = auth.uid() and is_active),
+    false);
+$$;
 
 create or replace function public.fin_can_read(p_store_id text)
 returns boolean
@@ -62,9 +116,14 @@ stable
 security definer
 set search_path = public, pg_temp
 as $$
-  select public.is_finance() or public.can_read_store(p_store_id);
+  select public.is_finance()
+     and (public.fin_covers_all_stores()
+          or p_store_id is null
+          or exists (select 1 from public.fin_user_stores
+                      where user_id = auth.uid() and store_id = p_store_id));
 $$;
 
+-- A viewer reads the books but never posts to them.
 create or replace function public.fin_can_write(p_store_id text)
 returns boolean
 language sql
@@ -72,13 +131,53 @@ stable
 security definer
 set search_path = public, pg_temp
 as $$
-  select public.is_finance() or public.can_write_store(p_store_id);
+  select public.fin_can_read(p_store_id)
+     and coalesce(public.fin_my_role() <> 'viewer', false);
 $$;
 
+revoke all on function public.fin_my_role() from public, anon;
+revoke all on function public.is_finance() from public, anon;
+revoke all on function public.fin_is_admin() from public, anon;
+revoke all on function public.fin_covers_all_stores() from public, anon;
 revoke all on function public.fin_can_read(text) from public, anon;
 revoke all on function public.fin_can_write(text) from public, anon;
+grant execute on function public.fin_my_role() to authenticated;
+grant execute on function public.is_finance() to authenticated;
+grant execute on function public.fin_is_admin() to authenticated;
+grant execute on function public.fin_covers_all_stores() to authenticated;
 grant execute on function public.fin_can_read(text) to authenticated;
 grant execute on function public.fin_can_write(text) to authenticated;
+
+-- Role and permissions are an administrator's to set. RLS already limits
+-- writes to fin_admin; this stops a stolen service key or a future policy
+-- slip from turning an accountant into an administrator quietly.
+create or replace function public.fin_guard_privileged_columns()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if auth.uid() is null then
+    return new;                      -- server-side/bootstrap write
+  end if;
+  if public.fin_is_admin() then
+    return new;
+  end if;
+  if new.role <> old.role
+     or new.permissions is distinct from old.permissions
+     or new.all_stores <> old.all_stores
+     or new.is_active <> old.is_active then
+    raise exception 'Only a finance administrator may change role, access or status';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists fin_users_guard on public.fin_users;
+create trigger fin_users_guard
+  before update on public.fin_users
+  for each row execute function public.fin_guard_privileged_columns();
 
 -- ---------------------------------------------------------------------
 -- 2. Chart of accounts
@@ -992,7 +1091,9 @@ declare
 begin
   select * into v_src from public.fin_journals where id = p_journal_id;
   if not found then raise exception 'Journal not found'; end if;
-  if not public.is_finance() then raise exception 'Only finance may reverse a journal'; end if;
+  if not public.fin_can_write(v_src.store_id) then
+    raise exception 'Not allowed to reverse a journal for store %', v_src.store_id;
+  end if;
   if v_src.is_reversed then raise exception 'Journal already reversed'; end if;
 
   insert into public.fin_journals (
@@ -1254,7 +1355,7 @@ begin
   foreach t in array array[
     'fin_accounts','fin_settings','fin_counters','fin_journals','fin_journal_lines',
     'fin_vouchers','fin_voucher_items','fin_payments','fin_payment_allocations',
-    'fin_documents','fin_document_items'
+    'fin_documents','fin_document_items','fin_users','fin_user_stores'
   ] loop
     execute format('alter table public.%I enable row level security', t);
   end loop;
@@ -1263,17 +1364,32 @@ end $$;
 -- Reference tier
 drop policy if exists "read fin_accounts" on public.fin_accounts;
 create policy "read fin_accounts" on public.fin_accounts
-  for select to authenticated using (true);
+  for select to authenticated using (public.is_finance());
 drop policy if exists "finance write fin_accounts" on public.fin_accounts;
 create policy "finance write fin_accounts" on public.fin_accounts
-  for all to authenticated using (public.is_finance()) with check (public.is_finance());
+  for all to authenticated
+  using (public.fin_can_write(store_id)) with check (public.fin_can_write(store_id));
 
 drop policy if exists "read fin_settings" on public.fin_settings;
 create policy "read fin_settings" on public.fin_settings
-  for select to authenticated using (true);
+  for select to authenticated using (public.is_finance());
 drop policy if exists "finance write fin_settings" on public.fin_settings;
 create policy "finance write fin_settings" on public.fin_settings
-  for all to authenticated using (public.is_finance()) with check (public.is_finance());
+  for all to authenticated using (public.fin_is_admin()) with check (public.fin_is_admin());
+
+drop policy if exists "read fin_users" on public.fin_users;
+create policy "read fin_users" on public.fin_users
+  for select to authenticated using (id = auth.uid() or public.is_finance());
+drop policy if exists "admin write fin_users" on public.fin_users;
+create policy "admin write fin_users" on public.fin_users
+  for all to authenticated using (public.fin_is_admin()) with check (public.fin_is_admin());
+
+drop policy if exists "read fin_user_stores" on public.fin_user_stores;
+create policy "read fin_user_stores" on public.fin_user_stores
+  for select to authenticated using (user_id = auth.uid() or public.is_finance());
+drop policy if exists "admin write fin_user_stores" on public.fin_user_stores;
+create policy "admin write fin_user_stores" on public.fin_user_stores
+  for all to authenticated using (public.fin_is_admin()) with check (public.fin_is_admin());
 
 drop policy if exists "read fin_counters" on public.fin_counters;
 create policy "read fin_counters" on public.fin_counters
@@ -1286,7 +1402,7 @@ create policy "read fin_journals" on public.fin_journals
 drop policy if exists "write fin_journals" on public.fin_journals;
 create policy "write fin_journals" on public.fin_journals
   for all to authenticated
-  using (public.is_finance()) with check (public.is_finance());
+  using (public.fin_can_write(store_id)) with check (public.fin_can_write(store_id));
 
 drop policy if exists "read fin_vouchers" on public.fin_vouchers;
 create policy "read fin_vouchers" on public.fin_vouchers
@@ -1320,8 +1436,12 @@ create policy "read fin_journal_lines" on public.fin_journal_lines
     where j.id = journal_id and public.fin_can_read(j.store_id)));
 drop policy if exists "write fin_journal_lines" on public.fin_journal_lines;
 create policy "write fin_journal_lines" on public.fin_journal_lines
-  for all to authenticated
-  using (public.is_finance()) with check (public.is_finance());
+  for all to authenticated using (exists (
+    select 1 from public.fin_journals j
+    where j.id = journal_id and public.fin_can_write(j.store_id)))
+  with check (exists (
+    select 1 from public.fin_journals j
+    where j.id = journal_id and public.fin_can_write(j.store_id)));
 
 drop policy if exists "read fin_voucher_items" on public.fin_voucher_items;
 create policy "read fin_voucher_items" on public.fin_voucher_items
@@ -1366,21 +1486,100 @@ create policy "write fin_document_items" on public.fin_document_items
     where d.id = doc_id and public.fin_can_write(d.store_id)));
 
 -- ---------------------------------------------------------------------
--- 20. Give the finance department its new pages
+-- 19b. Table privileges
 --
--- Page access is stored per user in profiles.permissions, so adding the
--- routes to permissions.ts is not enough for staff who already exist.
--- Owners and directors get them too; everyone else is left alone and an
--- admin grants access from the user screen.
+-- RLS decides which rows; these decide that the API role may reach the
+-- tables at all. Supabase grants this by default for tables created
+-- through its dashboard - stating it here keeps the migration correct on
+-- a project where that default was changed.
 -- ---------------------------------------------------------------------
-update public.profiles p
-set permissions = (
-  select jsonb_agg(distinct k)
-  from jsonb_array_elements_text(
-    p.permissions || jsonb_build_array(
-      'fin-dashboard','fin-vouchers','fin-payments','fin-receivables','fin-payables',
-      'fin-cashbook','fin-bank','fin-journal','fin-ledger','fin-trial-balance',
-      'fin-documents','fin-accounts','fin-import')
-  ) as k
-)
-where p.role in ('finance_manager','accountant','owner','operation_director');
+do $$
+declare t text;
+begin
+  foreach t in array array[
+    'fin_accounts','fin_settings','fin_journals','fin_journal_lines',
+    'fin_vouchers','fin_voucher_items','fin_payments','fin_payment_allocations',
+    'fin_documents','fin_document_items','fin_users','fin_user_stores'
+  ] loop
+    execute format('grant select, insert, update, delete on public.%I to authenticated', t);
+  end loop;
+  execute 'grant select on public.fin_counters to authenticated';
+  execute 'grant select on public.fin_receivables, public.fin_payables, public.fin_cash_balances to authenticated';
+end $$;
+
+-- =====================================================================
+-- 20. What finance may read from the POS side
+--
+-- The finance app reads a handful of POS tables - branches, products and
+-- the two party lists - and posts nothing back to them. Finance accounts
+-- have no `profiles` row, so the POS policies never match them; these
+-- add read-only access, store-scoped exactly like the ledger itself.
+-- Everything else in the POS stays invisible to a finance login.
+-- =====================================================================
+do $$
+declare t text;
+begin
+  foreach t in array array['stores','products','product_variants','product_categories',
+                           'suppliers','sales_reps','payment_methods'] loop
+    execute format('drop policy if exists "finance read %s" on public.%I', t, t);
+    execute format(
+      'create policy "finance read %s" on public.%I '
+      'for select to authenticated using (public.is_finance())', t, t);
+  end loop;
+end $$;
+
+-- Customers carry phone numbers and addresses, so they follow the same
+-- branch scope as the vouchers raised against them.
+drop policy if exists "finance read customers" on public.customers;
+create policy "finance read customers" on public.customers
+  for select to authenticated using (public.fin_can_read(store_id));
+
+-- Sales are read through fin_pull_pos_sales(), which runs as the function
+-- owner; a finance login still gets its own scoped read for reconciling a
+-- voucher against the receipt it came from.
+drop policy if exists "finance read sales" on public.sales;
+create policy "finance read sales" on public.sales
+  for select to authenticated using (public.fin_can_read(store_id));
+
+drop policy if exists "finance read sale_items" on public.sale_items;
+create policy "finance read sale_items" on public.sale_items
+  for select to authenticated using (exists (
+    select 1 from public.sales s
+    where s.id = sale_id and public.fin_can_read(s.store_id)));
+
+-- ---------------------------------------------------------------------
+-- 21. Bootstrap
+--
+-- Creates the first finance administrator from an existing auth user, so
+-- there is a way in before the user screen exists. Run it once:
+--
+--   select public.fin_bootstrap_admin('finance@yourcompany.com');
+--
+-- The email must already exist in Supabase Auth (Authentication -> Users
+-- -> Add user). After that, every other finance account is created from
+-- the app's own Users page.
+-- ---------------------------------------------------------------------
+create or replace function public.fin_bootstrap_admin(p_email text)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_id uuid;
+begin
+  select id into v_id from auth.users where lower(email) = lower(p_email);
+  if v_id is null then
+    raise exception 'No auth user with email % - create it in Supabase Auth first', p_email;
+  end if;
+
+  insert into public.fin_users (id, email, name, role, all_stores, is_active, created_by)
+  values (v_id, lower(p_email), split_part(p_email, '@', 1), 'fin_admin', true, true, 'bootstrap')
+  on conflict (id) do update
+    set role = 'fin_admin', all_stores = true, is_active = true;
+
+  return v_id;
+end;
+$$;
+
+revoke all on function public.fin_bootstrap_admin(text) from public, anon, authenticated;

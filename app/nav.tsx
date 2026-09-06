@@ -109,7 +109,7 @@ export default function Nav() {
               </div>
 
               <span className="text-xs text-slate-400 hidden md:inline">
-                {profile.email} ({profile.role})
+                {profile.email} · {t(`fin_role_${profile.role}` as TranslationKey)}
               </span>
               <button
                 onClick={signOut}

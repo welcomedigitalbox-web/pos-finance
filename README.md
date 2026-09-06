@@ -31,11 +31,41 @@ Run ပြီးရင်:
 - Chart of Accounts ၂၅ ခေါင်းစဉ် (မြန်မာ/အင်္ဂလိပ်) နဲ့ posting rule တွေ ဝင်လာမယ်
 - `finance_manager` / `accountant` / `owner` / `operation_director` role တွေ page permission ရမယ်
 
-## Login
+## Account များ — POS နဲ့ လုံးဝ သီးခြား
 
-POS account အတိုင်းပဲ — Supabase Auth က project တစ်ခုလုံးအတွက် တူတယ်။
-Account အသစ် ဒီမှာ မဆောက်ရ၊ POS ရဲ့ **Admin → Users** မှာပဲ ဆောက်ပြီး
-finance page တွေ ရွေးပေးလိုက်ရင် ဒီ app ဝင်လို့ရမယ်။
+Finance က ကိုယ်ပိုင် staff list (`fin_users`) ထားတယ်။ POS ရဲ့ `profiles` ကို လုံးဝ မဖတ်ပါ။
+
+- POS အကောင့်နဲ့ ဒီ app ကို ဝင်လို့ **မရ** — `fin_users` row မရှိရင် "Finance အကောင့် မဟုတ်ပါ" ပဲ ပြမယ်
+- Finance အကောင့်နဲ့ POS ကို ဝင်လို့ **မရ** — `profiles` row မရှိလို့
+- Supabase Auth ကတော့ project တစ်ခုတည်း ဖြစ်လို့ email ချင်း မတူစေရ (တစ်ယောက်တည်း နှစ်ဘက်လုံး
+  သုံးချင်ရင် email နှစ်ခု သုံးပါ)
+
+### Role
+
+| Role | ဘာရလဲ |
+|---|---|
+| `fin_admin` | အားလုံး + finance အကောင့်များ စီမံခြင်း |
+| `fin_manager` | အားလုံး (အကောင့် စီမံခြင်း မပါ), ဆိုင်ခွဲ အားလုံး |
+| `accountant` | ခွင့်ပြုထားတဲ့ စာမျက်နှာနဲ့ ဆိုင်ခွဲများသာ |
+| `viewer` | ဖတ်ရုံသာ — database က post လုပ်ခွင့် ပိတ်ထားတယ် |
+
+### ပထမဆုံး admin ဆောက်နည်း
+
+1. Supabase Dashboard → Authentication → Users → Add user (email + password, Auto Confirm ✓)
+2. SQL Editor မှာ:
+   ```sql
+   select public.fin_bootstrap_admin('finance@yourcompany.com');
+   ```
+3. ဒီ app ကို အဲဒီ email နဲ့ ဝင်ပြီး **Users** စာမျက်နှာမှာ ကျန်တဲ့ဝန်ထမ်းတွေ ဆက်ဆောက်ပါ။
+
+### Edge function
+
+`supabase/functions/fin-admin-create-user` ကို deploy လုပ်ရမယ် (အကောင့် ဆောက်/ဖျက်ရန်
+service role လိုလို့ browser ကနေ တိုက်ရိုက် မလုပ်နိုင်ပါ):
+
+```bash
+supabase functions deploy fin-admin-create-user
+```
 
 ## စာမျက်နှာများ
 
@@ -67,6 +97,12 @@ finance page တွေ ရွေးပေးလိုက်ရင် ဒီ app 
 - Debit ≠ Credit ဖြစ်ရင် database က ပယ်တယ် (`fin_assert_balanced`)။
 - စာရင်း မှားရင် ဖျက်လို့ မရ — `fin_reverse_journal` နဲ့ ပြန်ဖျက်စာရင်း ထုတ်ပါ။
 - Trade discount = invoice ပေါ်မှာ ချက်ချင်း နုတ်။ Cash discount = ငွေရှင်းချိန်မှသာ 5200/4200 သွား။
+
+## POS ဘက်ကို ဘာလုပ်လဲ
+
+ဖတ်ရုံသာ — `stores`, `products`, `suppliers`, `customers`, `sales_reps`, `sales`,
+`sale_items` (ဆိုင်ခွဲအလိုက် scope)။ POS table တစ်ခုမှ မရေးပါ။ POS ဘက်က ဘာမှ မပြောင်းပါ
+(policy အသစ် ထပ်ထည့်ရုံသာ)。
 
 ## POS sale တွေ ဆွဲယူခြင်း
 
