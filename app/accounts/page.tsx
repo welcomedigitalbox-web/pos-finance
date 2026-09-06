@@ -24,6 +24,12 @@ const SETTING_KEYS = [
   "discount_allowed", "discount_received", "cash_account", "bank_account",
 ];
 
+type MethodAccount = {
+  method_code: string;
+  account_id: string | null;
+  label: string | null;
+};
+
 type Draft = {
   id?: string;
   code: string;
@@ -63,6 +69,11 @@ export default function FinanceAccountsPage() {
   const [saving, setSaving] = useState(false);
   const [savingKey, setSavingKey] = useState("");
 
+  const [methods, setMethods] = useState<MethodAccount[]>([]);
+  const [newMethod, setNewMethod] = useState<MethodAccount>({ method_code: "", account_id: "", label: "" });
+  const [savingMethod, setSavingMethod] = useState(false);
+  const [confirmMethod, setConfirmMethod] = useState("");
+
   useEffect(() => {
     if (profile && !hasPermission(profile, "fin-accounts")) router.replace("/");
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -77,11 +88,13 @@ export default function FinanceAccountsPage() {
 
   async function load() {
     setLoading(true);
-    const [accRes, setRes] = await Promise.all([
+    const [accRes, setRes, methRes] = await Promise.all([
       supabase.from("fin_accounts").select("*").order("sort_order").order("code"),
       supabase.from("fin_settings").select("key,value,label"),
+      supabase.from("fin_method_accounts").select("method_code,account_id,label").order("method_code"),
     ]);
     setRows((accRes.data as FinAccount[]) || []);
+    setMethods((methRes.data as MethodAccount[]) || []);
     const map: Record<string, string> = {};
     const labelMap: Record<string, string> = {};
     for (const s of (setRes.data as { key: string; value: string; label: string | null }[]) || []) {
@@ -182,6 +195,73 @@ export default function FinanceAccountsPage() {
     }
   }
 
+  async function saveMethodAccount(code: string, accountId: string) {
+    setSavingKey("m:" + code);
+    try {
+      const { error } = await supabase
+        .from("fin_method_accounts")
+        .update({ account_id: accountId || null, updated_at: new Date().toISOString() })
+        .eq("method_code", code);
+      if (error) throw error;
+      setMethods((prev) =>
+        prev.map((m) => (m.method_code === code ? { ...m, account_id: accountId || null } : m))
+      );
+      showToast(t("fin_saved"));
+    } catch (err) {
+      showToast("❌ " + (errorText(err)));
+    } finally {
+      setSavingKey("");
+    }
+  }
+
+  async function addMethodAccount() {
+    const code = newMethod.method_code.trim().toLowerCase();
+    if (!code || !newMethod.account_id) {
+      showToast(t("fin_required"));
+      return;
+    }
+    setSavingMethod(true);
+    try {
+      const { error } = await supabase.from("fin_method_accounts").upsert(
+        {
+          method_code: code,
+          account_id: newMethod.account_id,
+          label: (newMethod.label || "").trim() || null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "method_code" }
+      );
+      if (error) throw error;
+      showToast(t("fin_saved"));
+      setNewMethod({ method_code: "", account_id: "", label: "" });
+      await load();
+    } catch (err) {
+      showToast("❌ " + (errorText(err)));
+    } finally {
+      setSavingMethod(false);
+    }
+  }
+
+  async function deleteMethodAccount(code: string) {
+    if (confirmMethod !== code) {
+      setConfirmMethod(code);
+      setTimeout(() => setConfirmMethod((c) => (c === code ? "" : c)), 4000);
+      return;
+    }
+    setConfirmMethod("");
+    setSavingKey("m:" + code);
+    try {
+      const { error } = await supabase.from("fin_method_accounts").delete().eq("method_code", code);
+      if (error) throw error;
+      setMethods((prev) => prev.filter((m) => m.method_code !== code));
+      showToast(t("fin_saved"));
+    } catch (err) {
+      showToast("❌ " + (errorText(err)));
+    } finally {
+      setSavingKey("");
+    }
+  }
+
   const storeName = (id: string | null) => (id ? stores.find((s) => s.id === id)?.name || id : "-");
 
   const visible = useMemo(
@@ -195,6 +275,11 @@ export default function FinanceAccountsPage() {
   );
 
   const activeAccounts = useMemo(() => rows.filter((r) => r.is_active), [rows]);
+
+  const settlementAccounts = useMemo(
+    () => activeAccounts.filter((a) => a.is_cash || a.is_bank),
+    [activeAccounts]
+  );
 
   return (
     <div className="pt-4">
@@ -302,6 +387,86 @@ export default function FinanceAccountsPage() {
           </div>
         ))}
       </div>
+
+      <h3 className="font-semibold mb-1">{t("fin_methodAccountsTitle")}</h3>
+      <p className="text-sm text-slate-500 mb-3">{t("fin_methodAccountsHint")}</p>
+      <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto mb-2">
+        <table className="w-full text-sm min-w-[700px]">
+          <thead className="bg-slate-50 text-slate-500">
+            <tr>
+              <th className="text-left px-3 py-2">{t("fin_methodCode")}</th>
+              <th className="text-left px-3 py-2">{t("fin_accountName")}</th>
+              <th className="text-left px-3 py-2">{t("fin_account")}</th>
+              <th className="text-left px-3 py-2">{t("fin_actions")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading && (
+              <tr><td colSpan={4} className="text-center text-slate-400 py-8">{t("fin_loading")}</td></tr>
+            )}
+            {!loading && methods.map((m) => (
+              <tr key={m.method_code} className="border-t border-slate-100">
+                <td className="px-3 py-2 font-mono text-xs">{m.method_code}</td>
+                <td className="px-3 py-2 text-slate-500">{m.label || "-"}</td>
+                <td className="px-3 py-2">
+                  <select
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm disabled:bg-slate-100"
+                    value={m.account_id || ""}
+                    disabled={savingKey === "m:" + m.method_code}
+                    onChange={(e) => saveMethodAccount(m.method_code, e.target.value)}>
+                    <option value="">-</option>
+                    {settlementAccounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.code} · {accName(a)}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+                <td className="px-3 py-2">
+                  <button onClick={() => deleteMethodAccount(m.method_code)}
+                    disabled={savingKey === "m:" + m.method_code}
+                    className="text-red-600 text-xs font-medium disabled:text-slate-300">
+                    {confirmMethod === m.method_code ? t("fin_delete") + " ?" : t("fin_delete")}
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {!loading && methods.length === 0 && (
+              <tr><td colSpan={4} className="text-center text-slate-400 py-8">{t("fin_empty")}</td></tr>
+            )}
+            <tr className="border-t border-slate-100 bg-slate-50/70">
+              <td className="px-3 py-2">
+                <input value={newMethod.method_code}
+                  onChange={(e) => setNewMethod({ ...newMethod, method_code: e.target.value })}
+                  placeholder={t("fin_methodCodeHint")}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono" />
+              </td>
+              <td className="px-3 py-2">
+                <input value={newMethod.label || ""}
+                  onChange={(e) => setNewMethod({ ...newMethod, label: e.target.value })}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+              </td>
+              <td className="px-3 py-2">
+                <select value={newMethod.account_id || ""}
+                  onChange={(e) => setNewMethod({ ...newMethod, account_id: e.target.value })}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
+                  <option value="">-</option>
+                  {settlementAccounts.map((a) => (
+                    <option key={a.id} value={a.id}>{a.code} · {accName(a)}</option>
+                  ))}
+                </select>
+              </td>
+              <td className="px-3 py-2">
+                <button onClick={addMethodAccount} disabled={savingMethod}
+                  className="px-4 py-2 bg-slate-900 disabled:bg-slate-300 text-white rounded-lg text-sm font-semibold">
+                  {savingMethod ? "..." : t("fin_save")}
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-slate-500 mb-10">{t("fin_methodFallback")}</p>
 
       {draft && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">

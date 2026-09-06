@@ -45,6 +45,8 @@ export default function FinanceDashboardPage() {
   const [toast, setToast] = useState("");
 
   const [pullFrom, setPullFrom] = useState(monthStart());
+  const [pullingPo, setPullingPo] = useState(false);
+  const [includeOrdered, setIncludeOrdered] = useState(false);
   const [pullTo, setPullTo] = useState(today());
   const [pulling, setPulling] = useState(false);
 
@@ -109,6 +111,30 @@ export default function FinanceDashboardPage() {
   function showToast(msg: string) {
     setToast(msg);
     setTimeout(() => setToast(""), 3500);
+  }
+
+  async function pullPo() {
+    setPullingPo(true);
+    try {
+      const { data, error } = await supabase.rpc("fin_pull_purchase_orders", {
+        p_store: storeId,
+        p_from: pullFrom,
+        p_to: pullTo,
+        p_include_ordered: includeOrdered,
+      });
+      if (error) throw error;
+      const res = (data || {}) as { vouchers?: number; payments?: number };
+      showToast(
+        t("fin_pullPoDone")
+          .replace("{v}", String(res.vouchers ?? 0))
+          .replace("{p}", String(res.payments ?? 0))
+      );
+      await load();
+    } catch (err) {
+      showToast("❌ " + errorText(err));
+    } finally {
+      setPullingPo(false);
+    }
   }
 
   async function pullPos() {
@@ -246,6 +272,23 @@ export default function FinanceDashboardPage() {
             {pulling ? "..." : t("fin_pullPos")}
           </button>
         </div>
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-xl p-4 mb-6">
+        <h3 className="font-semibold mb-1">{t("fin_pullPo")}</h3>
+        <p className="text-sm text-slate-500 mb-3">{t("fin_pullPoHint")}</p>
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="flex items-center gap-2 text-sm text-slate-600 py-2">
+            <input type="checkbox" checked={includeOrdered}
+              onChange={(e) => setIncludeOrdered(e.target.checked)} />
+            {t("fin_includeOrdered")}
+          </label>
+          <button onClick={pullPo} disabled={pullingPo || !storeId}
+            className="px-4 py-2.5 bg-slate-900 disabled:bg-slate-300 text-white rounded-lg text-sm font-semibold">
+            {pullingPo ? "..." : t("fin_pullPo")}
+          </button>
+        </div>
+        <p className="text-xs text-slate-400 mt-2">{t("fin_from")} / {t("fin_to")}: {pullFrom} — {pullTo}</p>
       </div>
 
       <h3 className="font-semibold mb-2">{t("fin_recentJournals")}</h3>
