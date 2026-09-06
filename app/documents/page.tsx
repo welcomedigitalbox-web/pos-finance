@@ -18,6 +18,7 @@ import {
   type DocType,
   type FinDocument,
   type PartyOption,
+  errorText,
 } from "@/lib/finance";
 import type { TranslationKey } from "@/app/i18n";
 
@@ -304,7 +305,7 @@ export default function DocumentsPage() {
       setShowNew(false);
       await load();
     } catch (err) {
-      showToast("❌ " + (err instanceof Error ? err.message : String(err)));
+      showToast("❌ " + (errorText(err)));
     } finally {
       setBusy(false);
     }
@@ -405,7 +406,7 @@ export default function DocumentsPage() {
       setConvertTo("");
       await load();
     } catch (err) {
-      showToast("❌ " + (err instanceof Error ? err.message : String(err)));
+      showToast("❌ " + (errorText(err)));
     } finally {
       setBusy(false);
     }

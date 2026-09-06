@@ -25,6 +25,7 @@ import {
   type PartyType,
   type VoucherKind,
   type VoucherStatus,
+  errorText,
 } from "@/lib/finance";
 
 const KINDS: VoucherKind[] = ["sale", "purchase", "income", "expense"];
@@ -384,7 +385,7 @@ export default function FinanceVouchersPage() {
       setDraft(null);
       await load();
     } catch (err) {
-      showToast("❌ " + (err instanceof Error ? err.message : String(err)));
+      showToast("❌ " + (errorText(err)));
     } finally {
       setSaving(false);
     }

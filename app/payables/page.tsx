@@ -15,6 +15,7 @@ import {
   accountLabel,
   type FinAccount,
   type Ageing,
+  errorText,
 } from "@/lib/finance";
 
 const BUCKETS = ["current", "1-30", "31-60", "61-90", "90+"];
@@ -156,7 +157,7 @@ export default function FinancePayablesPage() {
       setSettleRow(null);
       await load();
     } catch (err) {
-      showToast("❌ " + (err instanceof Error ? err.message : String(err)));
+      showToast("❌ " + (errorText(err)));
     } finally {
       setSaving(false);
     }

@@ -278,3 +278,27 @@ export function parseCsv(text: string): string[][] {
   if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row); }
   return rows.filter((r) => r.some((c) => c.trim() !== ""));
 }
+
+// Supabase errors are plain objects, not Error instances, so `String(err)`
+// on one renders as "[object Object]" and the actual cause is lost. This
+// digs out whatever the source really said.
+export function errorText(err: unknown): string {
+  if (!err) return "Unknown error";
+  if (typeof err === "string") return err;
+  if (err instanceof Error && err.message) return err.message;
+
+  const e = err as Record<string, unknown>;
+  const parts = [e.message, e.error_description, e.error, e.details, e.hint]
+    .filter((p): p is string => typeof p === "string" && p.length > 0);
+
+  if (parts.length > 0) {
+    const code = typeof e.code === "string" ? ` (${e.code})` : "";
+    return parts[0] + code;
+  }
+
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return "Unknown error";
+  }
+}

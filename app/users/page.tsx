@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { errorText } from "@/lib/finance";
 import { useAuth } from "@/app/auth-context";
 import { useStore } from "@/app/store-context";
 import { useLanguage } from "@/app/language-context";
@@ -244,7 +245,7 @@ export default function FinanceUsersPage() {
       setDraft(null);
       await load();
     } catch (err) {
-      showToast("❌ " + (err instanceof Error ? err.message : String(err)));
+      showToast("❌ " + (errorText(err)));
     } finally {
       setSaving(false);
     }
@@ -282,7 +283,7 @@ export default function FinanceUsersPage() {
       setConfirmDelete(null);
       await load();
     } catch (err) {
-      showToast("❌ " + (err instanceof Error ? err.message : String(err)));
+      showToast("❌ " + (errorText(err)));
     } finally {
       setDeleting(false);
     }

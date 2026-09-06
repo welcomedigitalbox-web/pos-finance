@@ -7,7 +7,7 @@ import { useStore } from "@/app/store-context";
 import { useAuth } from "@/app/auth-context";
 import { useLanguage } from "@/app/language-context";
 import { hasPermission } from "@/app/permissions";
-import { fmtMMK, type AccountType, type FinAccount } from "@/lib/finance";
+import { fmtMMK, type AccountType, type FinAccount, errorText } from "@/lib/finance";
 
 const TYPES: AccountType[] = ["asset", "liability", "equity", "income", "expense"];
 
@@ -153,7 +153,7 @@ export default function FinanceAccountsPage() {
       setDraft(null);
       await load();
     } catch (err) {
-      showToast("❌ " + (err instanceof Error ? err.message : String(err)));
+      showToast("❌ " + (errorText(err)));
     } finally {
       setSaving(false);
     }
@@ -176,7 +176,7 @@ export default function FinanceAccountsPage() {
       setSettings((prev) => ({ ...prev, [key]: code }));
       showToast(t("fin_saved"));
     } catch (err) {
-      showToast("❌ " + (err instanceof Error ? err.message : String(err)));
+      showToast("❌ " + (errorText(err)));
     } finally {
       setSavingKey("");
     }

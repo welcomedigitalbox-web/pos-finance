@@ -9,7 +9,7 @@ import { useAuth } from "@/app/auth-context";
 import { useLanguage } from "@/app/language-context";
 import { hasPermission, hasAnyFinanceAccess, PAGE_OPTIONS } from "@/app/permissions";
 import type { PageKey } from "@/app/permissions";
-import { fmtMMK, today, type Ageing, type FinJournal } from "@/lib/finance";
+import { fmtMMK, today, type Ageing, type FinJournal, errorText } from "@/lib/finance";
 
 type Bucket = "current" | "1-30" | "31-60" | "61-90" | "90+";
 const BUCKETS: Bucket[] = ["current", "1-30", "31-60", "61-90", "90+"];
@@ -123,7 +123,7 @@ export default function FinanceDashboardPage() {
       showToast(t("fin_pullPosDone").replace("{n}", String(Number(data) || 0)));
       await load();
     } catch (err) {
-      showToast("❌ " + (err instanceof Error ? err.message : String(err)));
+      showToast("❌ " + (errorText(err)));
     } finally {
       setPulling(false);
     }

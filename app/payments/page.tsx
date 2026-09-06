@@ -17,6 +17,7 @@ import {
   type FinAccount,
   type PartyOption,
   type Ageing,
+  errorText,
 } from "@/lib/finance";
 
 type PaymentRow = {
@@ -241,7 +242,7 @@ export default function FinancePaymentsPage() {
       setModalDir(null);
       await load();
     } catch (err) {
-      showToast("❌ " + (err instanceof Error ? err.message : String(err)));
+      showToast("❌ " + (errorText(err)));
     } finally {
       setSaving(false);
     }

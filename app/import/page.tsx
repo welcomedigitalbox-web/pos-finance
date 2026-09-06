@@ -14,6 +14,7 @@ import {
   today,
   type FinAccount,
   type PartyOption,
+  errorText,
 } from "@/lib/finance";
 
 type ImportKind = "sale" | "purchase" | "accounts";
@@ -223,7 +224,7 @@ export default function FinanceImportPage() {
         await importRow(r);
         ok++;
       } catch (err) {
-        fails.push({ rowNo: r.rowNo, message: err instanceof Error ? err.message : String(err) });
+        fails.push({ rowNo: r.rowNo, message: errorText(err) });
       }
       setProgress(i + 1);
     }
