@@ -31,6 +31,8 @@ function monthStart() {
   return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
 }
 
+const BATCH = 500;
+
 export default function FinanceDashboardPage() {
   const { profile } = useAuth();
   const { storeId, stores } = useStore();
@@ -47,6 +49,7 @@ export default function FinanceDashboardPage() {
   const [pullFrom, setPullFrom] = useState(monthStart());
   const [pullingPo, setPullingPo] = useState(false);
   const [includeOrdered, setIncludeOrdered] = useState(false);
+  const [pullAll, setPullAll] = useState(false);
   const [pullTo, setPullTo] = useState(today());
   const [pulling, setPulling] = useState(false);
 
@@ -118,16 +121,19 @@ export default function FinanceDashboardPage() {
     try {
       const { data, error } = await supabase.rpc("fin_pull_purchase_orders", {
         p_store: storeId,
-        p_from: pullFrom,
-        p_to: pullTo,
+        p_from: pullAll ? null : pullFrom,
+        p_to: pullAll ? null : pullTo,
         p_include_ordered: includeOrdered,
+        p_limit: BATCH,
       });
       if (error) throw error;
       const res = (data || {}) as { vouchers?: number; payments?: number };
+      const v = res.vouchers ?? 0;
       showToast(
         t("fin_pullPoDone")
-          .replace("{v}", String(res.vouchers ?? 0))
-          .replace("{p}", String(res.payments ?? 0))
+          .replace("{v}", String(v))
+          .replace("{p}", String(res.payments ?? 0)) +
+          (v >= BATCH ? " · " + t("fin_pullMore") : "")
       );
       await load();
     } catch (err) {
@@ -142,11 +148,16 @@ export default function FinanceDashboardPage() {
     try {
       const { data, error } = await supabase.rpc("fin_pull_pos_sales", {
         p_store: storeId,
-        p_from: pullFrom,
-        p_to: pullTo,
+        p_from: pullAll ? null : pullFrom,
+        p_to: pullAll ? null : pullTo,
+        p_limit: BATCH,
       });
       if (error) throw error;
-      showToast(t("fin_pullPosDone").replace("{n}", String(Number(data) || 0)));
+      const n = Number(data) || 0;
+      showToast(
+        t("fin_pullPosDone").replace("{n}", String(n)) +
+          (n >= BATCH ? " · " + t("fin_pullMore") : "")
+      );
       await load();
     } catch (err) {
       showToast("❌ " + (errorText(err)));
@@ -267,6 +278,11 @@ export default function FinanceDashboardPage() {
               {storeName(storeId)}
             </div>
           </div>
+          <label className="flex items-center gap-2 text-sm text-slate-600 py-2">
+            <input type="checkbox" checked={pullAll}
+              onChange={(e) => setPullAll(e.target.checked)} />
+            {t("fin_pullAll")}
+          </label>
           <button onClick={pullPos} disabled={pulling || !storeId}
             className="px-4 py-2.5 bg-slate-900 disabled:bg-slate-300 text-white rounded-lg text-sm font-semibold">
             {pulling ? "..." : t("fin_pullPos")}
@@ -288,7 +304,9 @@ export default function FinanceDashboardPage() {
             {pullingPo ? "..." : t("fin_pullPo")}
           </button>
         </div>
-        <p className="text-xs text-slate-400 mt-2">{t("fin_from")} / {t("fin_to")}: {pullFrom} — {pullTo}</p>
+        <p className="text-xs text-slate-400 mt-2">
+          {pullAll ? t("fin_pullAll") : `${t("fin_from")} / ${t("fin_to")}: ${pullFrom} — ${pullTo}`}
+        </p>
       </div>
 
       <h3 className="font-semibold mb-2">{t("fin_recentJournals")}</h3>

@@ -1086,6 +1086,8 @@ export const translations = {
     fin_methodCode: "နည်းလမ်း code",
     fin_methodCodeHint: "POS မှာ သိမ်းထားတဲ့ အတိုင်း အသေးစာလုံးနဲ့ (ဥပမာ kpay, wave)",
     fin_methodFallback: "မသတ်မှတ်ထားရင် — ငွေသားမျိုးက ဆိုင်ခွဲငွေသားစာရင်း, ကျန်တာ ဘဏ်",
+    fin_pullAll: "ရှိသမျှ အားလုံး (ရက်စွဲ မကန့်သတ်)",
+    fin_pullMore: "ကျန်နေသေးနိုင်သည် — ထပ်နှိပ်ပါ",
   },
   en: {
     drawer_zReport: "Cash Drawer Z-Report",
@@ -2172,6 +2174,8 @@ export const translations = {
     fin_methodCode: "Method code",
     fin_methodCodeHint: "Lower case, exactly as the POS stores it (e.g. kpay, wave)",
     fin_methodFallback: "Unmapped: cash-like methods go to the branch cash account, everything else to Bank",
+    fin_pullAll: "Everything (ignore the dates)",
+    fin_pullMore: "There may be more — press again",
   },
 } as const;
 
