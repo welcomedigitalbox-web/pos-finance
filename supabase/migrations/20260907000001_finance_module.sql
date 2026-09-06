@@ -1286,14 +1286,17 @@ begin
     raise exception 'Not allowed to write finance rows for store %', p_store;
   end if;
 
+  -- The table is aliased: without it, "s.id" in the sub-select binds to the
+  -- loop's own record variable, which has no value yet when the query is
+  -- planned, and the whole pull fails with "record s is not assigned yet".
   for s in
-    select * from public.sales
-    where store_id = p_store
-      and created_at::date between p_from and p_to
-      and order_status <> 'cancelled'
+    select * from public.sales sa
+    where sa.store_id = p_store
+      and sa.created_at::date between p_from and p_to
+      and sa.order_status <> 'cancelled'
       and not exists (
         select 1 from public.fin_vouchers v
-        where v.source_type = 'pos_sale' and v.source_id = s.id)
+        where v.source_type = 'pos_sale' and v.source_id = sa.id)
   loop
     v_channel := case
       when s.order_type = 'wholesale' then 'wholesale'
