@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* ============================================
+   Receipt print styles (80mm standard POS size)
+   ============================================ */
+#receipt-print {
+  display: none;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #receipt-print,
+  #receipt-print * {
+    visibility: visible;
+  }
+  #receipt-print {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 80mm;
+    padding: 4mm;
+    font-family: "Courier New", monospace;
+    font-size: 11px;
+    color: #000;
+  }
+}
+
+/* A purchase order is a document the supplier keeps, so printing renders a
+   dedicated sheet rather than the live screen. */
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+  body * {
+    visibility: hidden;
+  }
+  .po-print,
+  .po-print * {
+    visibility: visible;
+  }
+  .po-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+  tr {
+    page-break-inside: avoid;
+  }
+}
