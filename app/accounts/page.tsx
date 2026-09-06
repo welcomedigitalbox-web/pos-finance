@@ -30,6 +30,16 @@ type MethodAccount = {
   label: string | null;
 };
 
+type MethodCoverage = {
+  method_code: string;
+  label: string | null;
+  in_pos: boolean;
+  is_active: boolean | null;
+  used_count: number;
+  account_code: string | null;
+  account_name: string | null;
+};
+
 type Draft = {
   id?: string;
   code: string;
@@ -69,8 +79,10 @@ export default function FinanceAccountsPage() {
   const [saving, setSaving] = useState(false);
   const [savingKey, setSavingKey] = useState("");
 
-  const [methods, setMethods] = useState<MethodAccount[]>([]);
+  const [methods, setMethods] = useState<MethodCoverage[]>([]);
   const [newMethod, setNewMethod] = useState<MethodAccount>({ method_code: "", account_id: "", label: "" });
+  const [newInPos, setNewInPos] = useState(false);
+  const [newIsCash, setNewIsCash] = useState(false);
   const [savingMethod, setSavingMethod] = useState(false);
   const [confirmMethod, setConfirmMethod] = useState("");
 
@@ -91,10 +103,12 @@ export default function FinanceAccountsPage() {
     const [accRes, setRes, methRes] = await Promise.all([
       supabase.from("fin_accounts").select("*").order("sort_order").order("code"),
       supabase.from("fin_settings").select("key,value,label"),
-      supabase.from("fin_method_accounts").select("method_code,account_id,label").order("method_code"),
+      supabase
+        .from("fin_method_coverage")
+        .select("method_code,label,in_pos,is_active,used_count,account_code,account_name"),
     ]);
     setRows((accRes.data as FinAccount[]) || []);
-    setMethods((methRes.data as MethodAccount[]) || []);
+    setMethods((methRes.data as MethodCoverage[]) || []);
     const map: Record<string, string> = {};
     const labelMap: Record<string, string> = {};
     for (const s of (setRes.data as { key: string; value: string; label: string | null }[]) || []) {
@@ -198,15 +212,17 @@ export default function FinanceAccountsPage() {
   async function saveMethodAccount(code: string, accountId: string) {
     setSavingKey("m:" + code);
     try {
-      const { error } = await supabase
-        .from("fin_method_accounts")
-        .update({ account_id: accountId || null, updated_at: new Date().toISOString() })
-        .eq("method_code", code);
-      if (error) throw error;
-      setMethods((prev) =>
-        prev.map((m) => (m.method_code === code ? { ...m, account_id: accountId || null } : m))
+      const { error } = await supabase.from("fin_method_accounts").upsert(
+        {
+          method_code: code,
+          account_id: accountId || null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "method_code" }
       );
+      if (error) throw error;
       showToast(t("fin_saved"));
+      await load();
     } catch (err) {
       showToast("❌ " + (errorText(err)));
     } finally {
@@ -222,6 +238,18 @@ export default function FinanceAccountsPage() {
     }
     setSavingMethod(true);
     try {
+      if (newInPos) {
+        const { error: posError } = await supabase.from("payment_methods").insert({
+          name: (newMethod.label || "").trim() || code,
+          code,
+          is_cash: newIsCash,
+          is_cod: false,
+          is_active: true,
+          store_id: null,
+          sort_order: 0,
+        });
+        if (posError) throw posError;
+      }
       const { error } = await supabase.from("fin_method_accounts").upsert(
         {
           method_code: code,
@@ -234,6 +262,8 @@ export default function FinanceAccountsPage() {
       if (error) throw error;
       showToast(t("fin_saved"));
       setNewMethod({ method_code: "", account_id: "", label: "" });
+      setNewInPos(false);
+      setNewIsCash(false);
       await load();
     } catch (err) {
       showToast("❌ " + (errorText(err)));
@@ -253,8 +283,8 @@ export default function FinanceAccountsPage() {
     try {
       const { error } = await supabase.from("fin_method_accounts").delete().eq("method_code", code);
       if (error) throw error;
-      setMethods((prev) => prev.filter((m) => m.method_code !== code));
       showToast(t("fin_saved"));
+      await load();
     } catch (err) {
       showToast("❌ " + (errorText(err)));
     } finally {
@@ -280,6 +310,12 @@ export default function FinanceAccountsPage() {
     () => activeAccounts.filter((a) => a.is_cash || a.is_bank),
     [activeAccounts]
   );
+
+  const accountIdByCode = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const a of rows) map[a.code] = a.id;
+    return map;
+  }, [rows]);
 
   return (
     <div className="pt-4">
@@ -391,27 +427,45 @@ export default function FinanceAccountsPage() {
       <h3 className="font-semibold mb-1">{t("fin_methodAccountsTitle")}</h3>
       <p className="text-sm text-slate-500 mb-3">{t("fin_methodAccountsHint")}</p>
       <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto mb-2">
-        <table className="w-full text-sm min-w-[700px]">
+        <table className="w-full text-sm min-w-[900px]">
           <thead className="bg-slate-50 text-slate-500">
             <tr>
               <th className="text-left px-3 py-2">{t("fin_methodCode")}</th>
               <th className="text-left px-3 py-2">{t("fin_accountName")}</th>
+              <th className="text-left px-3 py-2">{t("fin_status")}</th>
+              <th className="text-right px-3 py-2">{t("fin_methodUsed")}</th>
               <th className="text-left px-3 py-2">{t("fin_account")}</th>
               <th className="text-left px-3 py-2">{t("fin_actions")}</th>
             </tr>
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={4} className="text-center text-slate-400 py-8">{t("fin_loading")}</td></tr>
+              <tr><td colSpan={6} className="text-center text-slate-400 py-8">{t("fin_loading")}</td></tr>
             )}
             {!loading && methods.map((m) => (
-              <tr key={m.method_code} className="border-t border-slate-100">
+              <tr key={m.method_code}
+                className={`border-t border-slate-100 ${m.account_code === null ? "bg-orange-50/40" : ""}`}>
                 <td className="px-3 py-2 font-mono text-xs">{m.method_code}</td>
                 <td className="px-3 py-2 text-slate-500">{m.label || "-"}</td>
                 <td className="px-3 py-2">
+                  {m.in_pos && (
+                    <span className="mr-2 px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700">
+                      {t("fin_methodInPos")}
+                    </span>
+                  )}
+                  {m.account_code === null && (
+                    <span className="px-2 py-0.5 rounded text-xs bg-orange-100 text-orange-700">
+                      {t("fin_methodUnmapped")}
+                    </span>
+                  )}
+                </td>
+                <td className="px-3 py-2 text-right text-slate-500">
+                  {Number(m.used_count) > 0 ? `${t("fin_methodUsed")} ${Number(m.used_count)}` : "-"}
+                </td>
+                <td className="px-3 py-2">
                   <select
                     className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm disabled:bg-slate-100"
-                    value={m.account_id || ""}
+                    value={(m.account_code && accountIdByCode[m.account_code]) || ""}
                     disabled={savingKey === "m:" + m.method_code}
                     onChange={(e) => saveMethodAccount(m.method_code, e.target.value)}>
                     <option value="">-</option>
@@ -424,7 +478,7 @@ export default function FinanceAccountsPage() {
                 </td>
                 <td className="px-3 py-2">
                   <button onClick={() => deleteMethodAccount(m.method_code)}
-                    disabled={savingKey === "m:" + m.method_code}
+                    disabled={savingKey === "m:" + m.method_code || m.account_code === null}
                     className="text-red-600 text-xs font-medium disabled:text-slate-300">
                     {confirmMethod === m.method_code ? t("fin_delete") + " ?" : t("fin_delete")}
                   </button>
@@ -432,7 +486,7 @@ export default function FinanceAccountsPage() {
               </tr>
             ))}
             {!loading && methods.length === 0 && (
-              <tr><td colSpan={4} className="text-center text-slate-400 py-8">{t("fin_empty")}</td></tr>
+              <tr><td colSpan={6} className="text-center text-slate-400 py-8">{t("fin_empty")}</td></tr>
             )}
             <tr className="border-t border-slate-100 bg-slate-50/70">
               <td className="px-3 py-2">
@@ -445,6 +499,24 @@ export default function FinanceAccountsPage() {
                 <input value={newMethod.label || ""}
                   onChange={(e) => setNewMethod({ ...newMethod, label: e.target.value })}
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+              </td>
+              <td className="px-3 py-2" colSpan={2}>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={newInPos}
+                    onChange={(e) => {
+                      setNewInPos(e.target.checked);
+                      if (!e.target.checked) setNewIsCash(false);
+                    }} />
+                  {t("fin_addToPos")}
+                </label>
+                <p className="text-xs text-slate-500 mt-1">{t("fin_addToPosHint")}</p>
+                {newInPos && (
+                  <label className="flex items-center gap-2 text-sm mt-2">
+                    <input type="checkbox" checked={newIsCash}
+                      onChange={(e) => setNewIsCash(e.target.checked)} />
+                    {t("fin_methodIsCash")}
+                  </label>
+                )}
               </td>
               <td className="px-3 py-2">
                 <select value={newMethod.account_id || ""}
@@ -466,7 +538,8 @@ export default function FinanceAccountsPage() {
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-slate-500 mb-10">{t("fin_methodFallback")}</p>
+      <p className="text-xs text-slate-500">{t("fin_methodFallback")}</p>
+      <p className="text-xs text-slate-500 mb-10">{t("fin_methodSyncNote")}</p>
 
       {draft && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">

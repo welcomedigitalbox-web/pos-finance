@@ -1088,6 +1088,13 @@ export const translations = {
     fin_methodFallback: "မသတ်မှတ်ထားရင် — ငွေသားမျိုးက ဆိုင်ခွဲငွေသားစာရင်း, ကျန်တာ ဘဏ်",
     fin_pullAll: "ရှိသမျှ အားလုံး (ရက်စွဲ မကန့်သတ်)",
     fin_pullMore: "ကျန်နေသေးနိုင်သည် — ထပ်နှိပ်ပါ",
+    fin_methodUnmapped: "စာရင်းခေါင်းစဉ် မသတ်မှတ်ရသေး",
+    fin_methodInPos: "POS မှာ ရှိ",
+    fin_methodUsed: "သုံးထားမှု",
+    fin_addToPos: "POS ငွေပေးချေမှုနည်းလမ်းအဖြစ်ပါ ထည့်မည်",
+    fin_addToPosHint: "ခြစ်ထားရင် POS checkout မှာပါ ပေါ်လာမယ်",
+    fin_methodIsCash: "ငွေသား နည်းလမ်း",
+    fin_methodSyncNote: "POS Admin မှာ နည်းလမ်းအသစ် ထည့်တိုင်း ဒီစာရင်းထဲ အလိုအလျောက် ဝင်လာမယ်",
   },
   en: {
     drawer_zReport: "Cash Drawer Z-Report",
@@ -2176,6 +2183,13 @@ export const translations = {
     fin_methodFallback: "Unmapped: cash-like methods go to the branch cash account, everything else to Bank",
     fin_pullAll: "Everything (ignore the dates)",
     fin_pullMore: "There may be more — press again",
+    fin_methodUnmapped: "Not mapped yet",
+    fin_methodInPos: "In the POS",
+    fin_methodUsed: "Used",
+    fin_addToPos: "Also add it as a POS payment method",
+    fin_addToPosHint: "Checked, the till will offer it at checkout too",
+    fin_methodIsCash: "Cash method",
+    fin_methodSyncNote: "A method added in POS admin appears here automatically",
   },
 } as const;
 
