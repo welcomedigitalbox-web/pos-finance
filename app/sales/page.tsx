@@ -92,6 +92,10 @@ function detailPayments(d: Detail): ReceiptPayment[] {
 
 export default function FinanceSalesPage() {
   const { stores } = useStore();
+
+  // Nothing is sold out of a warehouse, so it has no place in this filter -
+  // it only makes the list of branches longer to read.
+  const sellingStores = stores.filter((s) => !s.is_warehouse);
   const { profile } = useAuth();
   const { t } = useLanguage();
   const router = useRouter();
@@ -175,7 +179,8 @@ export default function FinanceSalesPage() {
       if (
         q &&
         !(r.reference || "").toLowerCase().includes(q) &&
-        !(r.customer_name || "").toLowerCase().includes(q)
+        !(r.customer_name || "").toLowerCase().includes(q) &&
+        !(r.voucher_no || "").toLowerCase().includes(q)
       )
         return false;
       return true;
@@ -262,7 +267,7 @@ export default function FinanceSalesPage() {
             onChange={(e) => setStoreFilter(e.target.value)}
           >
             <option value="">{t("fin_all")}</option>
-            {stores.map((s) => (
+            {sellingStores.map((s) => (
               <option key={s.id} value={s.id}>{s.name}</option>
             ))}
           </select>
