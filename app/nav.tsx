@@ -88,7 +88,9 @@ export default function Nav() {
                   onChange={(e) => setStoreId(e.target.value)}
                 >
                   {stores.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
+                    <option key={s.id} value={s.id}>
+                      {s.is_warehouse ? `${s.name} · ${t("fin_warehouse")}` : s.name}
+                    </option>
                   ))}
                 </select>
               )}

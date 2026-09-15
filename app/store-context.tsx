@@ -41,9 +41,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ? rows
       : rows.filter((s) => allowed.includes(s.id));
 
-    setStores(visible);
-    if (visible.length > 0 && !visible.some((s) => s.id === storeId)) {
-      setStoreIdState(visible[0].id);
+    // Shops first, then warehouses: a warehouse is a real set of books here
+    // (stock is bought into one), but nobody starts their day in it.
+    const sorted = [...visible].sort(
+      (a, b) => Number(a.is_warehouse) - Number(b.is_warehouse) || a.name.localeCompare(b.name)
+    );
+
+    setStores(sorted);
+    if (sorted.length > 0 && !sorted.some((s) => s.id === storeId)) {
+      setStoreIdState((sorted.find((s) => !s.is_warehouse) || sorted[0]).id);
     }
   }
 

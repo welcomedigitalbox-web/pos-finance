@@ -1119,6 +1119,7 @@ export const translations = {
     fin_channelName: "လမ်းကြောင်း",
     fin_phone: "ဖုန်း",
     fin_address: "လိပ်စာ",
+    fin_warehouse: "ဂိုဒေါင်",
   },
   en: {
     drawer_zReport: "Cash Drawer Z-Report",
@@ -2238,6 +2239,7 @@ export const translations = {
     fin_channelName: "Channel",
     fin_phone: "Phone",
     fin_address: "Address",
+    fin_warehouse: "Warehouse",
   },
 } as const;
 
