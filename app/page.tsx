@@ -9,17 +9,17 @@ import { useAuth } from "@/app/auth-context";
 import { useLanguage } from "@/app/language-context";
 import { hasPermission, hasAnyFinanceAccess, PAGE_OPTIONS } from "@/app/permissions";
 import type { PageKey } from "@/app/permissions";
-import { fmtMMK, today, type Ageing, type FinJournal, errorText } from "@/lib/finance";
+import { fmtMMK, today, type Ageing, errorText } from "@/lib/finance";
 
 type Bucket = "current" | "1-30" | "31-60" | "61-90" | "90+";
 const BUCKETS: Bucket[] = ["current", "1-30", "31-60", "61-90", "90+"];
 
 type CashRow = { id: string; balance: number; is_cash: boolean; is_bank: boolean };
-type JournalRow = FinJournal & { total_debit: number };
 
-type QuickLink = { key: PageKey; href: string; labelKey: "nav_finVouchers" | "nav_finPayments" | "nav_finReceivables" | "nav_finPayables" };
+type QuickLink = { key: PageKey; href: string; labelKey: "nav_finSales" | "nav_finVouchers" | "nav_finPayments" | "nav_finReceivables" | "nav_finPayables" };
 
 const QUICK_LINKS: QuickLink[] = [
+  { key: "fin-sales", href: "/sales", labelKey: "nav_finSales" },
   { key: "fin-vouchers", href: "/vouchers", labelKey: "nav_finVouchers" },
   { key: "fin-payments", href: "/payments", labelKey: "nav_finPayments" },
   { key: "fin-receivables", href: "/receivables", labelKey: "nav_finReceivables" },
@@ -42,8 +42,6 @@ export default function FinanceDashboardPage() {
   const [ar, setAr] = useState<Ageing[]>([]);
   const [ap, setAp] = useState<Ageing[]>([]);
   const [cash, setCash] = useState<CashRow[]>([]);
-  const [journals, setJournals] = useState<JournalRow[]>([]);
-  const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState("");
 
   const [pullFrom, setPullFrom] = useState(monthStart());
@@ -77,38 +75,15 @@ export default function FinanceDashboardPage() {
   if (!profile || !hasPermission(profile, "fin-dashboard")) return null;
 
   async function load() {
-    setLoading(true);
-    const [arRes, apRes, cashRes, jRes] = await Promise.all([
+    const [arRes, apRes, cashRes] = await Promise.all([
       supabase.from("fin_receivables").select("*"),
       supabase.from("fin_payables").select("*"),
       supabase.from("fin_cash_balances").select("id,balance,is_cash,is_bank"),
-      supabase
-        .from("fin_journals")
-        .select("*")
-        .order("journal_date", { ascending: false })
-        .order("created_at", { ascending: false })
-        .limit(15),
     ]);
-
-    const js = (jRes.data as FinJournal[]) || [];
-    let withTotals: JournalRow[] = js.map((j) => ({ ...j, total_debit: 0 }));
-    if (js.length > 0) {
-      const { data: lines } = await supabase
-        .from("fin_journal_lines")
-        .select("journal_id,debit")
-        .in("journal_id", js.map((j) => j.id));
-      const sums = new Map<string, number>();
-      for (const l of (lines as { journal_id: string; debit: number }[]) || []) {
-        sums.set(l.journal_id, (sums.get(l.journal_id) || 0) + Number(l.debit || 0));
-      }
-      withTotals = js.map((j) => ({ ...j, total_debit: sums.get(j.id) || 0 }));
-    }
 
     setAr((arRes.data as Ageing[]) || []);
     setAp((apRes.data as Ageing[]) || []);
     setCash((cashRes.data as CashRow[]) || []);
-    setJournals(withTotals);
-    setLoading(false);
   }
 
   function showToast(msg: string) {
@@ -307,40 +282,6 @@ export default function FinanceDashboardPage() {
         <p className="text-xs text-slate-400 mt-2">
           {pullAll ? t("fin_pullAll") : `${t("fin_from")} / ${t("fin_to")}: ${pullFrom} — ${pullTo}`}
         </p>
-      </div>
-
-      <h3 className="font-semibold mb-2">{t("fin_recentJournals")}</h3>
-      <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto">
-        <table className="w-full text-sm min-w-[720px]">
-          <thead className="bg-slate-50 text-slate-500">
-            <tr>
-              <th className="text-left px-3 py-2">{t("fin_no")}</th>
-              <th className="text-left px-3 py-2">{t("fin_date")}</th>
-              <th className="text-left px-3 py-2">{t("fin_kind")}</th>
-              <th className="text-left px-3 py-2">{t("fin_store")}</th>
-              <th className="text-left px-3 py-2">{t("fin_memo")}</th>
-              <th className="text-right px-3 py-2">{t("fin_debit")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && (
-              <tr><td colSpan={6} className="text-center text-slate-400 py-8">{t("fin_loading")}</td></tr>
-            )}
-            {!loading && journals.map((j) => (
-              <tr key={j.id} className="border-t border-slate-100">
-                <td className="px-3 py-2 font-mono text-xs">{j.journal_no}</td>
-                <td className="px-3 py-2">{j.journal_date}</td>
-                <td className="px-3 py-2">{j.journal_type}</td>
-                <td className="px-3 py-2 text-slate-500">{storeName(j.store_id)}</td>
-                <td className="px-3 py-2">{j.memo || "-"}</td>
-                <td className="px-3 py-2 text-right font-medium">{fmtMMK(j.total_debit)}</td>
-              </tr>
-            ))}
-            {!loading && journals.length === 0 && (
-              <tr><td colSpan={6} className="text-center text-slate-400 py-8">{t("fin_empty")}</td></tr>
-            )}
-          </tbody>
-        </table>
       </div>
 
       {toast && (
