@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useStore } from "./store-context";
+import { APP_URL } from "@/lib/apps";
 import { useAuth } from "./auth-context";
 import { useLanguage } from "./language-context";
 import type { TranslationKey } from "./i18n";
@@ -13,7 +13,6 @@ const GROUPS: PageGroup[] = ["entry", "outstanding", "books", "setup"];
 
 export default function Nav() {
   const pathname = usePathname();
-  const { storeId, setStoreId, stores, isStoreLocked } = useStore();
   const { profile, signOut } = useAuth();
   const { lang, setLang, t } = useLanguage();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -77,23 +76,12 @@ export default function Nav() {
             </div>
 
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              {isStoreLocked ? (
-                <span className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs sm:text-sm bg-slate-50 text-slate-600">
-                  🔒 {stores.find((s) => s.id === storeId)?.name || storeId}
-                </span>
-              ) : (
-                <select
-                  className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs sm:text-sm"
-                  value={storeId}
-                  onChange={(e) => setStoreId(e.target.value)}
-                >
-                  {stores.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.is_warehouse ? `${s.name} · ${t("fin_warehouse")}` : s.name}
-                    </option>
-                  ))}
-                </select>
-              )}
+              
+                href={`${APP_URL.report}/dashboard`}
+                className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs sm:text-sm bg-white text-slate-600 hover:bg-slate-50 whitespace-nowrap"
+              >
+                📋 Daily Report
+              </a>
 
               <div className="hidden sm:flex border border-slate-200 rounded-lg overflow-hidden text-xs">
                 <button
