@@ -673,13 +673,13 @@ export default function FinanceSalesPage() {
           {toast}
         </div>
       )}
-    </div>
-  );
+
       {slipPhoto && (
         <div className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4 print:hidden"
           onClick={() => setSlipPhoto(null)}>
           <img src={slipPhoto} alt="" className="max-h-full max-w-full rounded-lg" />
         </div>
       )}
-
+    </div>
+  );
 }
