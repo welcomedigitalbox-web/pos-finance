@@ -2,7 +2,8 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { supabase } from "@/lib/supabase";
-import { useRouter, usePathname } from "next/navigation";
+import { usePathname } from "next/navigation";
+import { APP_URL } from "@/lib/apps";
 import type { Session } from "@supabase/supabase-js";
 
 import type { FinanceRole } from "./permissions";
@@ -38,7 +39,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [stores, setStores] = useState<string[]>([]);
   const [notFinance, setNotFinance] = useState(false);
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
@@ -91,14 +91,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
+    // One sign-in covers every app and the POS owns the login screen, so send
+    // people there with a note of where they were headed. Whether a finance
+    // account exists is a separate question, answered by AccessGate.
     if (!loading && !session && pathname !== "/login") {
-      router.replace("/login");
+      const back = encodeURIComponent(window.location.href);
+      window.location.replace(`${APP_URL.pos}/login?next=${back}`);
     }
-  }, [loading, session, pathname, router]);
+  }, [loading, session, pathname]);
 
   async function signOut() {
+    // Clears the shared cookie, so this signs the person out of every app at
+    // once -- which is what one sign-in ought to mean.
     await supabase.auth.signOut();
-    router.replace("/login");
+    window.location.replace(`${APP_URL.pos}/login`);
   }
 
   return (
