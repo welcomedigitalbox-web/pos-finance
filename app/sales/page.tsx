@@ -84,6 +84,12 @@ function detailNum(d: Detail, key: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function detailSlips(d: Detail): string[] {
+  if (!d) return [];
+  const v = d["slips"];
+  return Array.isArray(v) ? (v as string[]) : [];
+}
+
 function detailPayments(d: Detail): ReceiptPayment[] {
   if (!d) return [];
   const v = d["payments"];
@@ -116,6 +122,8 @@ export default function FinanceSalesPage() {
 
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [receiptLoading, setReceiptLoading] = useState(false);
+  const [slipPhoto, setSlipPhoto] = useState<string | null>(null);
+  const [repFilter, setRepFilter] = useState("");
 
   useEffect(() => {
     if (profile && !hasPermission(profile, "fin-sales")) router.replace("/");
@@ -162,6 +170,12 @@ export default function FinanceSalesPage() {
   const deliveryOptions = useMemo(() => {
     const set = new Set<string>();
     for (const r of rows) if (r.delivery_status) set.add(r.delivery_status);
+    return Array.from(set).sort();
+  }, [rows]);
+
+  const repOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of rows) if (r.sale_rep_name) set.add(r.sale_rep_name);
     return Array.from(set).sort();
   }, [rows]);
 
@@ -388,7 +402,7 @@ export default function FinanceSalesPage() {
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={13} className="text-center text-slate-400 py-8">{t("fin_loading")}</td></tr>
+              <tr><td colSpan={14} className="text-center text-slate-400 py-8">{t("fin_loading")}</td></tr>
             )}
             {!loading && visible.map((r) => (
               <tr
@@ -416,6 +430,7 @@ export default function FinanceSalesPage() {
                   {t(`fin_type_${r.sale_type}` as TranslationKey)}
                 </td>
                 <td className="px-3 py-2 font-medium">{r.customer_name || "-"}</td>
+                <td className="px-3 py-2 text-slate-500">{r.sale_rep_name || "-"}</td>
                 <td className="px-3 py-2 text-slate-500">{r.payment_method || "-"}</td>
                 <td className="px-3 py-2">
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${STATUS_COLORS[r.payment_status] || ""}`}>
@@ -440,7 +455,7 @@ export default function FinanceSalesPage() {
               </tr>
             ))}
             {!loading && visible.length === 0 && (
-              <tr><td colSpan={13} className="text-center text-slate-400 py-8">{t("fin_empty")}</td></tr>
+              <tr><td colSpan={14} className="text-center text-slate-400 py-8">{t("fin_empty")}</td></tr>
             )}
           </tbody>
         </table>
