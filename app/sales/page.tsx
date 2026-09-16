@@ -188,6 +188,7 @@ export default function FinanceSalesPage() {
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
+      if (repFilter && r.sale_rep_name !== repFilter) return false;
       if (deliveryFilter && (r.delivery_status || "") !== deliveryFilter) return false;
       if (methodFilter && (r.payment_method || "") !== methodFilter) return false;
       if (
@@ -391,6 +392,7 @@ export default function FinanceSalesPage() {
               <th className="text-left px-3 py-2">{t("fin_store")}</th>
               <th className="text-left px-3 py-2">{t("fin_saleType")}</th>
               <th className="text-left px-3 py-2">{t("fin_customer")}</th>
+              <th className="text-left px-3 py-2" data-k="fin_salesRep_col">{t("fin_salesRep")}</th>
               <th className="text-left px-3 py-2">{t("fin_method")}</th>
               <th className="text-left px-3 py-2">{t("fin_status")}</th>
               <th className="text-left px-3 py-2">{t("fin_deliveryStatus")}</th>
@@ -539,6 +541,18 @@ export default function FinanceSalesPage() {
                 </div>
               </div>
 
+              {detailSlips(receipt.detail).length > 0 && (
+                <div className="mb-4 print:hidden">
+                  <div className="text-sm font-medium mb-2">Payment Slip</div>
+                  <div className="flex flex-wrap gap-2">
+                    {detailSlips(receipt.detail).map((u, i) => (
+                      <img key={i} src={u} alt="" onClick={() => setSlipPhoto(u)}
+                        className="h-24 w-24 object-cover rounded-lg border border-slate-200 cursor-zoom-in" />
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="overflow-x-auto border border-slate-200 rounded-xl print:border-0">
                 <table className="w-full text-sm min-w-[520px]">
                   <thead className="bg-slate-50 text-slate-500">
@@ -661,4 +675,11 @@ export default function FinanceSalesPage() {
       )}
     </div>
   );
+      {slipPhoto && (
+        <div className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4 print:hidden"
+          onClick={() => setSlipPhoto(null)}>
+          <img src={slipPhoto} alt="" className="max-h-full max-w-full rounded-lg" />
+        </div>
+      )}
+
 }
