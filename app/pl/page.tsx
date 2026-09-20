@@ -12,9 +12,10 @@ import { fmtMMK, today } from "@/lib/finance";
 type Line = { code: string; name: string; amount: number; prev: number };
 type StoreRow = { store: string; sales: number; prev_sales: number; expenses: number; net: number };
 type ChanRow = { channel: string; sales: number; prev_sales: number; orders: number };
+type SrcRow = { source: string; sales: number; orders: number };
 type PL = {
   income: Line[]; expense: Line[];
-  by_store: StoreRow[]; by_channel: ChanRow[];
+  by_store: StoreRow[]; by_channel: ChanRow[]; by_source: SrcRow[];
   totals: { income: number; cogs: number; expense: number;
             prev_income: number; prev_cogs: number; prev_expense: number };
 };
@@ -100,6 +101,10 @@ export default function PLPage() {
         Channel: r.channel, Orders: r.orders, Sales: r.sales, Previous: r.prev_sales,
       }))
     ), "By channel");
+
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
+      (pl?.by_source || []).map((r) => ({ Source: r.source, Orders: r.orders, Sales: r.sales }))
+    ), "By source");
 
     XLSX.writeFile(wb, "profit-and-loss-" + from + "-to-" + to + ".xlsx");
   }
@@ -242,6 +247,32 @@ export default function PLPage() {
               </tbody>
             </table>
           </div>
+        </div>
+      </div>
+
+      <div className="mb-6">
+        <h3 className="font-semibold mb-2">Where the orders came from</h3>
+        <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto max-w-xl">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-slate-500">
+              <tr>
+                <th className="text-left px-3 py-2">Source</th>
+                <th className="text-right px-3 py-2">Orders</th>
+                <th className="text-right px-3 py-2">Sales</th>
+                <th className="text-right px-3 py-2">Share</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(pl?.by_source || []).map((r) => (
+                <tr key={r.source} className="border-t border-slate-100">
+                  <td className="px-3 py-2 capitalize">{r.source}</td>
+                  <td className="px-3 py-2 text-right text-slate-500">{r.orders}</td>
+                  <td className="px-3 py-2 text-right font-medium">{fmtMMK(r.sales)}</td>
+                  <td className="px-3 py-2 text-right text-slate-500">{pct(n(r.sales), inc).toFixed(1)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 
