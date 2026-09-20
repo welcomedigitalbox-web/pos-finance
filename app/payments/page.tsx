@@ -88,6 +88,8 @@ export default function FinancePaymentsPage() {
   const [parties, setParties] = useState<PartyOption[]>([]);
   const [allocs, setAllocs] = useState<AllocDraft[]>([]);
   const [allocLoading, setAllocLoading] = useState(false);
+  const [invNo, setInvNo] = useState("");
+  const [invBusy, setInvBusy] = useState(false);
 
   useEffect(() => {
     if (profile && !hasPermission(profile, "fin-payments")) router.replace("/");
@@ -149,6 +151,7 @@ export default function FinancePaymentsPage() {
     setReference("");
     setNote("");
     setAllocs([]);
+    setInvNo("");
     const cashAcc = accounts.find((a) => a.is_cash) || accounts.find((a) => a.is_bank);
     setAccountId(cashAcc?.id || "");
     setParties(await loadParties(dir === "in" ? "customer" : "supplier"));
@@ -170,6 +173,45 @@ export default function FinancePaymentsPage() {
       ((data as Ageing[]) || []).map((v) => ({ voucher: v, amount: "", discount: "" }))
     );
     setAllocLoading(false);
+  }
+
+  // An invoice number is what the customer quotes on the transfer slip, so it
+  // is the fastest way in: find it, pull up that party, and pre-fill the line.
+  async function findInvoice() {
+    const code = invNo.trim();
+    if (!code || !modalDir) return;
+    setInvBusy(true);
+    const { data } = await supabase
+      .from(modalDir === "in" ? "fin_receivables" : "fin_payables")
+      .select("*")
+      .ilike("voucher_no", "%" + code + "%")
+      .limit(5);
+    const hits = (data as Ageing[]) || [];
+    if (!hits.length) {
+      setInvBusy(false);
+      showToast("No unpaid invoice matches " + code);
+      return;
+    }
+    const hit = hits[0] as Ageing & { party_id?: string | null; party_name?: string | null };
+
+    const { data: rest } = await supabase
+      .from(modalDir === "in" ? "fin_receivables" : "fin_payables")
+      .select("*")
+      .eq("party_id", hit.party_id ?? "")
+      .order("voucher_date", { ascending: true });
+
+    const list = ((rest as Ageing[]) || []).length ? (rest as Ageing[]) : hits;
+    setPartyId(hit.party_id ?? "");
+    setPartyName(hit.party_name ?? "");
+    setAllocs(
+      list.map((v) => ({
+        voucher: v,
+        amount: v.id === hit.id ? String(v.balance ?? "") : "",
+        discount: "",
+      }))
+    );
+    if (!Number(amount || 0)) setAmount(String(hit.balance ?? ""));
+    setInvBusy(false);
   }
 
   // Oldest voucher first, capped at each balance, until the payment runs out.
@@ -529,7 +571,7 @@ export default function FinancePaymentsPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
               <div>
                 <label className="text-sm text-slate-600">
                   {modalDir === "in" ? t("fin_customer") : t("fin_supplier")}
@@ -552,6 +594,25 @@ export default function FinancePaymentsPage() {
                   value={partyName}
                   onChange={(e) => setPartyName(e.target.value)}
                 />
+              </div>
+              <div>
+                <label className="text-sm text-slate-600">Invoice no.</label>
+                <div className="flex gap-2 mt-1">
+                  <input
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                    placeholder="JV-YGN-WH-2026-00383"
+                    value={invNo}
+                    onChange={(ev) => setInvNo(ev.target.value)}
+                    onKeyDown={(ev) => { if (ev.key === "Enter") { ev.preventDefault(); findInvoice(); } }}
+                  />
+                  <button
+                    onClick={findInvoice}
+                    disabled={invBusy || !invNo.trim()}
+                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm font-medium disabled:opacity-40 shrink-0"
+                  >
+                    {invBusy ? "..." : "Find"}
+                  </button>
+                </div>
               </div>
             </div>
 
