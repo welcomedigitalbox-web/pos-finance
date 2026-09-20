@@ -19,6 +19,8 @@ export default function NewExpensePage() {
   const router = useRouter();
 
   const [accounts, setAccounts] = useState<FinAccount[]>([]);
+  const [methodMap, setMethodMap] = useState<Record<string, string>>({});
+  const [methodList, setMethodList] = useState<string[]>(METHODS);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
@@ -38,11 +40,30 @@ export default function NewExpensePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile]);
 
+  // Which wallet or bank an account is, in the ledger's own words, so picking
+  // the account is enough and nobody types "cash" against KBZPay.
+  useEffect(() => {
+    supabase.from("fin_method_accounts").select("method_code, account_id").then(({ data }) => {
+      const rows = (data as { method_code: string; account_id: string }[]) || [];
+      const map: Record<string, string> = {};
+      for (const r of rows) if (!map[r.account_id]) map[r.account_id] = r.method_code;
+      setMethodMap(map);
+      const codes = Array.from(new Set(rows.map((r) => r.method_code))).sort();
+      setMethodList(codes.length ? codes : METHODS);
+    });
+  }, []);
+
+  function pickPayAccount(id: string) {
+    setPayAccount(id);
+    const m = methodMap[id];
+    if (m) setMethod(m);
+  }
+
   useEffect(() => {
     loadAccounts().then((a) => {
       setAccounts(a);
       const cash = a.find((x) => x.is_cash) || a.find((x) => x.is_bank);
-      setPayAccount(cash?.id || "");
+      if (cash) pickPayAccount(cash.id);
     });
   }, []);
 
@@ -153,7 +174,7 @@ export default function NewExpensePage() {
           <>
             <div>
               <label className="text-sm text-slate-600">{t("fin_account")}</label>
-              <select className={FIELD} value={payAccount} onChange={(e) => setPayAccount(e.target.value)}>
+              <select className={FIELD} value={payAccount} onChange={(e) => pickPayAccount(e.target.value)}>
                 <option value="">-</option>
                 {cashBank.map((a) => (
                   <option key={a.id} value={a.id}>{accountLabel(a, lang)}</option>
@@ -163,7 +184,7 @@ export default function NewExpensePage() {
             <div>
               <label className="text-sm text-slate-600">{t("fin_method")}</label>
               <select className={FIELD} value={method} onChange={(e) => setMethod(e.target.value)}>
-                {METHODS.map((m) => (<option key={m} value={m}>{m}</option>))}
+                {methodList.map((m) => (<option key={m} value={m}>{m}</option>))}
               </select>
             </div>
           </>
