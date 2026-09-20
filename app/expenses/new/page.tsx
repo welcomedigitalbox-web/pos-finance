@@ -150,7 +150,7 @@ export default function NewExpensePage() {
   if (!profile || !hasPermission(profile, "fin-expenses")) return null;
 
   return (
-    <div className="pt-4 max-w-3xl">
+    <div className="pt-4 max-w-5xl">
       <button onClick={() => router.push("/expenses")} className="text-blue-600 text-sm font-medium mb-3">
         ← {t("nav_finExpenses")}
       </button>
@@ -240,12 +240,12 @@ export default function NewExpensePage() {
           </>
         )}
 
-        <div className="sm:col-span-2">
+        <div className="sm:col-span-3 sm:col-span-3">
           <label className="text-sm text-slate-600">{t("fin_note")}</label>
           <input className={FIELD} disabled={!whereSet} value={note} onChange={(e) => setNote(e.target.value)} />
         </div>
 
-        <div className="sm:col-span-2 flex gap-2 pt-2">
+        <div className="sm:col-span-3 sm:col-span-3 flex gap-2 pt-2">
           <button onClick={() => router.push("/expenses")}
             className="px-5 py-2.5 border border-slate-200 rounded-lg text-sm font-medium">
             {t("fin_cancel")}
