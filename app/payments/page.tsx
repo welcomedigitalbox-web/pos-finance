@@ -457,7 +457,7 @@ export default function FinancePaymentsPage() {
                 <td className={`px-3 py-2 text-right ${Number(r.unallocated) > 0 ? "text-orange-600 font-medium" : "text-slate-400"}`}>
                   {fmtNum(r.unallocated)}
                 </td>
-                <td className="px-3 py-2 text-slate-500 text-xs">{r.reference || "-"}</td>
+                <td className="px-3 py-2 text-slate-500 text-xs">{r.note || r.reference || "-"}</td>
               </tr>
             ))}
             {!loading && visible.length === 0 && (
