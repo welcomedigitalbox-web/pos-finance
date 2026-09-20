@@ -20,7 +20,7 @@ export default function NewExpensePage() {
 
   const [accounts, setAccounts] = useState<FinAccount[]>([]);
   const [methodMap, setMethodMap] = useState<Record<string, string>>({});
-  const [methodList, setMethodList] = useState<string[]>(METHODS);
+  const [methodList, setMethodList] = useState<{ code: string; label: string }[]>(METHODS.map((m) => ({ code: m, label: m })));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
@@ -43,13 +43,22 @@ export default function NewExpensePage() {
   // Which wallet or bank an account is, in the ledger's own words, so picking
   // the account is enough and nobody types "cash" against KBZPay.
   useEffect(() => {
-    supabase.from("fin_method_accounts").select("method_code, account_id").then(({ data }) => {
-      const rows = (data as { method_code: string; account_id: string }[]) || [];
+    supabase.from("fin_method_accounts").select("method_code, account_id, label").then(({ data }) => {
+      const rows = (data as { method_code: string; account_id: string; label: string | null }[]) || [];
+      // An account answers to several spellings; the shortest one stands for
+      // the rest so the list reads as a list of wallets, not of aliases.
+      const best: Record<string, { code: string; label: string }> = {};
+      for (const r of rows) {
+        const cur = best[r.account_id];
+        if (!cur || r.method_code.length < cur.code.length) {
+          best[r.account_id] = { code: r.method_code, label: r.label || r.method_code };
+        }
+      }
       const map: Record<string, string> = {};
-      for (const r of rows) if (!map[r.account_id]) map[r.account_id] = r.method_code;
+      for (const [acc, m] of Object.entries(best)) map[acc] = m.code;
       setMethodMap(map);
-      const codes = Array.from(new Set(rows.map((r) => r.method_code))).sort();
-      setMethodList(codes.length ? codes : METHODS);
+      const opts = Object.values(best).sort((x, y) => x.label.localeCompare(y.label));
+      setMethodList(opts.length ? opts : METHODS.map((m) => ({ code: m, label: m })));
     });
   }, []);
 
@@ -184,7 +193,7 @@ export default function NewExpensePage() {
             <div>
               <label className="text-sm text-slate-600">{t("fin_method")}</label>
               <select className={FIELD} value={method} onChange={(e) => setMethod(e.target.value)}>
-                {methodList.map((m) => (<option key={m} value={m}>{m}</option>))}
+                {methodList.map((m) => (<option key={m.code} value={m.code}>{m.label}</option>))}
               </select>
             </div>
           </>
