@@ -29,11 +29,24 @@ export default function NewExpensePage() {
   const [expAccount, setExpAccount] = useState("");
   const [amount, setAmount] = useState("");
   const [store, setStore] = useState("");
+  const [dept, setDept] = useState("");
+  const [depts, setDepts] = useState<{ v: string; label: string }[]>([]);
   const [payee, setPayee] = useState("");
   const [note, setNote] = useState("");
   const [payNow, setPayNow] = useState(true);
   const [payAccount, setPayAccount] = useState("");
   const [method, setMethod] = useState("cash");
+
+  // Head-office costs have no shop, so the department is the cost centre.
+  useEffect(() => {
+    supabase.from("departments").select("*").then(({ data }) => {
+      const rows = ((data || []) as Record<string, unknown>[]).filter((d) => d.active !== false);
+      setDepts(rows.map((d) => {
+        const v = String(d.id ?? d.code ?? d.key ?? d.name ?? "");
+        return { v, label: String(d.name ?? d.label ?? v) };
+      }).filter((d) => d.v).sort((x, y) => x.label.localeCompare(y.label)));
+    });
+  }, []);
 
   useEffect(() => {
     if (profile && !hasPermission(profile, "fin-expenses")) router.replace("/");
@@ -115,6 +128,9 @@ export default function NewExpensePage() {
         };
       }
       const { data, error } = await supabase.rpc("fin_save_voucher", { p: payload });
+      if (!error && data && dept) {
+        await supabase.from("fin_vouchers").update({ department_id: dept }).eq("id", data as never);
+      }
       if (error) throw error;
       router.push("/expenses/" + String(data));
     } catch (e) {
@@ -142,6 +158,11 @@ export default function NewExpensePage() {
           <select className={FIELD} value={store} onChange={(e) => setStore(e.target.value)}>
             <option value="">-</option>
             {stores.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
+          </select>
+          <label className="text-sm text-slate-600">Department</label>
+          <select className={FIELD} value={dept} onChange={(e) => setDept(e.target.value)}>
+            <option value="">-</option>
+            {depts.map((d) => (<option key={d.v} value={d.v}>{d.label}</option>))}
           </select>
         </div>
         <div>
