@@ -97,10 +97,7 @@ export default function FinanceReceivablesPage() {
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
 
-  // Picking a courier narrows the list to what that courier is carrying.
-  const visibleByCourier = courierPick
-    ? visible.filter((r) => (courierOf[String(r.id)] || "ရုံး/ဆိုင်ကိုယ်တိုင်") === courierPick)
-    : visible;
+
     return rows.filter((r) => {
       if (bucket && r.ageing_bucket !== bucket) return false;
       if (overdueOnly && Number(r.days_overdue || 0) <= 0) return false;
@@ -122,6 +119,11 @@ export default function FinanceReceivablesPage() {
     for (const r of visible) map[r.ageing_bucket] = (map[r.ageing_bucket] || 0) + Number(r.balance || 0);
     return map;
   }, [visible]);
+
+  // Picking a courier narrows the list to what that courier is carrying.
+  const visibleByCourier = courierPick
+    ? visible.filter((r) => (courierOf[String(r.id)] || "ရုံး/ဆိုင်ကိုယ်တိုင်") === courierPick)
+    : visible;
 
   const chosen = visible.filter((r) => sel.has(r.id));
   const chosenTotal = chosen.reduce((s2, r) => s2 + Number(r.balance || 0), 0);
