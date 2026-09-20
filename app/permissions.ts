@@ -9,6 +9,7 @@ export type PageKey =
   | "fin-sales"
   | "fin-vouchers"
   | "fin-expenses"
+  | "fin-methods"
   | "fin-payments"
   | "fin-receivables"
   | "fin-payables"
@@ -49,6 +50,7 @@ export const PAGE_OPTIONS: { key: PageKey; href: string; labelKey: string; group
   { key: "fin-ledger", href: "/general-ledger", labelKey: "nav_finLedger", group: "books" },
   { key: "fin-trial-balance", href: "/trial-balance", labelKey: "nav_finTrialBalance", group: "books" },
   { key: "fin-accounts", href: "/accounts", labelKey: "nav_finAccounts", group: "setup" },
+  { key: "fin-methods", href: "/methods", labelKey: "nav_finMethods", group: "setup" },
   { key: "fin-import", href: "/import", labelKey: "nav_finImport", group: "setup" },
   { key: "fin-users", href: "/users", labelKey: "nav_finUsers", group: "setup" },
 ];
