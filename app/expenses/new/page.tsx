@@ -156,7 +156,7 @@ export default function NewExpensePage() {
       </button>
       <h2 className="font-semibold text-lg mb-4">+ {t("nav_finExpenses")}</h2>
 
-      <div className="bg-white border border-slate-200 rounded-xl p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="bg-white border border-slate-200 rounded-xl p-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div>
           <label className="text-sm text-slate-600">Charge to</label>
           <select className={FIELD} value={scope} onChange={(e) => pickScope(e.target.value)}>
@@ -164,25 +164,26 @@ export default function NewExpensePage() {
             <option value="store">{t("fin_store")}</option>
             <option value="dept">Department</option>
           </select>
-          {scope === "store" && (<>
-          <label className="text-sm text-slate-600">{t("fin_store")}</label>
-          <select className={FIELD}  value={store} onChange={(e) => setStore(e.target.value)}>
-            <option value="">-</option>
-            {stores.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
-          </select>
-          </>)}
-          {scope === "dept" && (<>
-          <label className="text-sm text-slate-600">Department</label>
-          <select className={FIELD}  value={dept} onChange={(e) => setDept(e.target.value)}>
-            <option value="">-</option>
-            {depts.map((d) => (<option key={d.v} value={d.v}>{d.label}</option>))}
-          </select>
-          </>)}
-
-          <label className="text-sm text-slate-600">{t("fin_date")}</label>
-          <input type="date" className={FIELD} disabled={!whereSet} value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
         <div>
+          {scope === "store" && (<>
+            <label className="text-sm text-slate-600">{t("fin_store")}</label>
+            <select className={FIELD} value={store} onChange={(e) => setStore(e.target.value)}>
+              <option value="">-</option>
+              {stores.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
+            </select>
+          </>)}
+          {scope === "dept" && (<>
+            <label className="text-sm text-slate-600">Department</label>
+            <select className={FIELD} value={dept} onChange={(e) => setDept(e.target.value)}>
+              <option value="">-</option>
+              {depts.map((d) => (<option key={d.v} value={d.v}>{d.label}</option>))}
+            </select>
+          </>)}
+        </div>
+        <div>
+          <label className="text-sm text-slate-600">{t("fin_date")}</label>
+          <input type="date" className={FIELD} disabled={!whereSet} value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
         <div>
           <label className="text-sm text-slate-600">Expense type</label>
@@ -212,7 +213,7 @@ export default function NewExpensePage() {
           <input className={FIELD} disabled={!whereSet} value={payee} onChange={(e) => setPayee(e.target.value)} />
         </div>
 
-        <div className="sm:col-span-2 border-t border-slate-100 pt-4">
+        <div className="sm:col-span-3 border-t border-slate-100 pt-4">
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={payNow} onChange={(e) => setPayNow(e.target.checked)} />
             {t("fin_dir_out")}
