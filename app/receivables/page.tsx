@@ -37,6 +37,8 @@ export default function FinanceReceivablesPage() {
   const [bucket, setBucket] = useState("");
   const [overdueOnly, setOverdueOnly] = useState(false);
 
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [collectRow, setCollectRow] = useState<Ageing | null>(null);
   const [saving, setSaving] = useState(false);
   const [payDate, setPayDate] = useState(today());
@@ -112,6 +114,79 @@ export default function FinanceReceivablesPage() {
     }
     return Array.from(map.values()).sort((a, b) => b.balance - a.balance);
   }, [visible]);
+
+  const chosen = visible.filter((r) => sel.has(r.id));
+  const chosenTotal = chosen.reduce((s2, r) => s2 + Number(r.balance || 0), 0);
+  const allShown = visible.length > 0 && chosen.length === visible.length;
+
+  function toggleOne(id: string) {
+    setSel((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setSel(allShown ? new Set() : new Set(visible.map((r) => r.id)));
+  }
+
+  function openBulk() {
+    setPayDate(today());
+    setMethod("cash");
+    const cashAcc = accounts.find((a2) => a2.is_cash) || accounts.find((a2) => a2.is_bank);
+    setAccountId(cashAcc?.id || "");
+    setBulkOpen(true);
+  }
+
+  // One payment per customer, because a receipt belongs to whoever paid it.
+  // Several invoices from the same person settle together on one receipt.
+  async function bulkCollect() {
+    if (!chosen.length || !payDate || !accountId) {
+      showToast(t("fin_required"));
+      return;
+    }
+    setSaving(true);
+    try {
+      const groups = new Map<string, Ageing[]>();
+      for (const r of chosen) {
+        const k = (r.party_id || r.party_name || "-") + "|" + (r.store_id || "");
+        groups.set(k, [...(groups.get(k) || []), r]);
+      }
+      for (const list of Array.from(groups.values())) {
+        const total = list.reduce((s2, r) => s2 + Number(r.balance || 0), 0);
+        const { error } = await supabase.rpc("fin_record_payment", {
+          p: {
+            payment_date: payDate,
+            direction: "in",
+            store_id: list[0].store_id,
+            account_id: accountId,
+            method,
+            party_type: "customer",
+            party_id: list[0].party_id,
+            party_name: list[0].party_name,
+            amount: total,
+            discount_amount: 0,
+            reference: list.length === 1 ? list[0].voucher_no : list.length + " invoices",
+            allocations: list.map((r) => ({
+              voucher_id: r.id,
+              amount: Number(r.balance || 0),
+              discount_amount: 0,
+            })),
+          },
+        });
+        if (error) throw error;
+      }
+      showToast(t("fin_saved"));
+      setSel(new Set());
+      setBulkOpen(false);
+      await load();
+    } catch (err) {
+      showToast("error: " + ((err as { message?: string })?.message || String(err)));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   function openCollect(r: Ageing) {
     setCollectRow(r);
@@ -264,6 +339,9 @@ export default function FinanceReceivablesPage() {
         <table className="w-full text-sm min-w-[1100px]">
           <thead className="bg-slate-50 text-slate-500">
             <tr>
+              <th className="px-3 py-2 w-8">
+                <input type="checkbox" checked={allShown} onChange={toggleAll} />
+              </th>
               <th className="text-left px-3 py-2">Doc no.</th>
               <th className="text-left px-3 py-2">{t("fin_no")}</th>
               <th className="text-left px-3 py-2">{t("fin_date")}</th>
@@ -281,13 +359,16 @@ export default function FinanceReceivablesPage() {
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={13} className="text-center text-slate-400 py-8">{t("fin_loading")}</td></tr>
+              <tr><td colSpan={14} className="text-center text-slate-400 py-8">{t("fin_loading")}</td></tr>
             )}
             {!loading && visible.map((r) => (
               <tr
                 key={r.id}
                 className={`border-t border-slate-100 ${Number(r.days_overdue || 0) > 0 ? "bg-orange-50/40" : ""}`}
               >
+                <td className="px-3 py-2">
+                  <input type="checkbox" checked={sel.has(r.id)} onChange={() => toggleOne(r.id)} />
+                </td>
                 <td className="px-3 py-2 font-medium text-xs">{r.doc_no || "-"}</td>
                 <td className="px-3 py-2 font-mono text-xs">{r.voucher_no}</td>
                 <td className="px-3 py-2">{r.voucher_date}</td>
@@ -310,11 +391,61 @@ export default function FinanceReceivablesPage() {
               </tr>
             ))}
             {!loading && visible.length === 0 && (
-              <tr><td colSpan={13} className="text-center text-slate-400 py-8">{t("fin_empty")}</td></tr>
+              <tr><td colSpan={14} className="text-center text-slate-400 py-8">{t("fin_empty")}</td></tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {chosen.length > 0 && (
+        <div className="fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 px-4 py-3 z-40">
+          <div className="max-w-6xl mx-auto flex flex-wrap items-center gap-3">
+            <span className="text-sm">
+              {chosen.length} selected · <strong>{fmtMMK(chosenTotal)}</strong>
+            </span>
+            <button onClick={() => setSel(new Set())} className="text-xs text-slate-500">clear</button>
+            <button onClick={openBulk}
+              className="ml-auto px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold">
+              {t("fin_collect")}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {bulkOpen && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-lg">
+            <h3 className="font-semibold text-lg mb-1">{t("fin_collect")}</h3>
+            <p className="text-sm text-slate-500 mb-4">
+              {chosen.length} invoices · <strong>{fmtMMK(chosenTotal)}</strong>
+            </p>
+            <label className="text-sm text-slate-600">{t("fin_date")}</label>
+            <input type="date" value={payDate} onChange={(ev) => setPayDate(ev.target.value)}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 mb-3" />
+            <label className="text-sm text-slate-600">{t("fin_account")}</label>
+            <select value={accountId} onChange={(ev) => setAccountId(ev.target.value)}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 mb-3">
+              <option value="">-</option>
+              {accounts.filter((a2) => a2.is_cash || a2.is_bank).map((a2) => (
+                <option key={a2.id} value={a2.id}>{accountLabel(a2, lang)}</option>
+              ))}
+            </select>
+            <label className="text-sm text-slate-600">{t("fin_method")}</label>
+            <input value={method} onChange={(ev) => setMethod(ev.target.value)}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 mb-4" />
+            <div className="flex gap-2">
+              <button onClick={() => setBulkOpen(false)}
+                className="flex-1 py-2.5 border border-slate-200 rounded-lg text-sm font-medium">
+                {t("fin_cancel")}
+              </button>
+              <button onClick={bulkCollect} disabled={saving}
+                className="flex-1 py-2.5 bg-green-600 disabled:bg-slate-300 text-white rounded-lg text-sm font-semibold">
+                {saving ? "..." : t("fin_save")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {collectRow && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">

@@ -2229,7 +2229,7 @@ export const translations = {
     fin_source_pos: "POS",
     fin_source_online: "Online",
     fin_viewReceipt: "Receipt",
-    fin_receiptTitle: "Sale detail",
+    fin_receiptTitle: "Sales Invoice",
     fin_txnCount: "Transactions",
     fin_totalSales: "Total sales",
     fin_collected: "Collected",
