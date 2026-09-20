@@ -17,6 +17,7 @@ export type DocType =
   | "debit_note" | "remittance_advice" | "receipt" | "statement";
 
 export type FinAccount = {
+  expense_kind?: string | null;
   id: string;
   code: string;
   name: string;

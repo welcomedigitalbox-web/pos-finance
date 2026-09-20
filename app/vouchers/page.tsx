@@ -107,6 +107,7 @@ export default function FinanceVouchersPage() {
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState("");
 
+  const [expType, setExpType] = useState("");
   const [kindFilter, setKindFilter] = useState<"all" | VoucherKind>("all");
   const [statusFilter, setStatusFilter] = useState<"all" | VoucherStatus>("all");
   const [storeFilter, setStoreFilter] = useState<"this" | "all">("this");
@@ -208,7 +209,13 @@ export default function FinanceVouchersPage() {
 
   const lineAccounts = useMemo(() => {
     if (!draft) return [];
-    return accounts.filter((a) => (isIncomeSide(draft.kind) ? a.type === "income" : a.type === "expense"));
+    const side = accounts.filter((a) =>
+      isIncomeSide(draft.kind) ? a.type === "income" : a.type === "expense"
+    );
+    // Direct or indirect is a property of the account, so choosing one just
+    // narrows the list rather than storing a second thing to keep in step.
+    if (draft.kind !== "expense" || !expType) return side;
+    return side.filter((a) => (a.expense_kind || "indirect") === expType);
   }, [accounts, draft]);
 
   const parties = useMemo(() => {
@@ -545,6 +552,17 @@ export default function FinanceVouchersPage() {
                     ))}
                   </select>
                 </div>
+                {draft.kind === "expense" && (
+                  <div>
+                    <label className="text-xs text-slate-500">Expense type</label>
+                    <select className={inputCls} value={expType}
+                      onChange={(e) => setExpType(e.target.value)}>
+                      <option value="">All</option>
+                      <option value="direct">Direct</option>
+                      <option value="indirect">Indirect</option>
+                    </select>
+                  </div>
+                )}
                 <div>
                   <label className="text-xs text-slate-500">{t("fin_date")}</label>
                   <input type="date" className={inputCls} value={draft.voucher_date}
