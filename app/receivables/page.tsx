@@ -47,6 +47,16 @@ export default function FinanceReceivablesPage() {
   const [accountId, setAccountId] = useState("");
   const [method, setMethod] = useState("cash");
 
+  const [courierRows, setCourierRows] = useState<{ courier: string; courier_id: string | null; orders: number; outstanding: number }[]>([]);
+  const [courierPick, setCourierPick] = useState<string | null>(null);
+
+  // Money on its way back from a courier is still money owed to us.
+  useEffect(() => {
+    supabase.from("fin_courier_cod").select("*").then(({ data }) => {
+      setCourierRows((data as never) || []);
+    });
+  }, []);
+
   useEffect(() => {
     if (profile && !hasPermission(profile, "fin-receivables")) router.replace("/");
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -233,6 +243,24 @@ export default function FinanceReceivablesPage() {
   return (
     <div className="pt-4">
       <h2 className="font-semibold text-lg mb-4">{t("fin_receivablesTitle")}</h2>
+
+      {courierRows.length > 0 && (
+        <div className="bg-white border border-slate-200 rounded-xl p-4 mb-5">
+          <div className="text-xs text-slate-500 uppercase mb-2">With couriers</div>
+          <div className="flex flex-wrap gap-2">
+            {courierRows.map((c) => (
+              <button key={c.courier}
+                onClick={() => setCourierPick(courierPick === c.courier ? null : c.courier)}
+                className={"border rounded-lg px-3 py-2 text-left " +
+                  (courierPick === c.courier ? "border-slate-900 bg-slate-50" : "border-slate-200")}>
+                <div className="text-sm font-medium">{c.courier}</div>
+                <div className="text-xs text-slate-500">{c.orders} · {fmtMMK(c.outstanding)}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
         <div className="bg-white border border-slate-200 rounded-xl p-3">
