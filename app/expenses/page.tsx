@@ -30,7 +30,6 @@ export default function FinanceExpensesPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState("");
-  const [open, setOpen] = useState(false);
 
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -97,7 +96,6 @@ export default function FinanceExpensesPage() {
     setMethod("cash");
     const cash = accounts.find((a) => a.is_cash) || accounts.find((a) => a.is_bank);
     setPayAccount(cash?.id || "");
-    setOpen(true);
   }
 
   async function save() {
@@ -133,7 +131,6 @@ export default function FinanceExpensesPage() {
       const { error } = await supabase.rpc("fin_save_voucher", { p: payload });
       if (error) throw error;
       say(t("fin_saved"));
-      setOpen(false);
       await load();
     } catch (err) {
       say("error: " + errorText(err));
@@ -154,8 +151,8 @@ export default function FinanceExpensesPage() {
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <h2 className="font-semibold text-lg">{t("nav_finExpenses")}</h2>
         <button onClick={openNew}
-          className="px-3 py-2 bg-slate-900 text-white rounded-lg text-sm font-semibold">
-          + {t("nav_finExpenses")}
+          className="px-3 py-2 border border-slate-200 rounded-lg text-sm font-medium">
+          {t("fin_cancel")}
         </button>
       </div>
 
@@ -223,18 +220,17 @@ export default function FinanceExpensesPage() {
         </table>
       </div>
 
-      {open && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-lg my-8">
+      <div className="bg-white border border-slate-200 rounded-xl p-5 mb-5 max-w-3xl">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4">
             <h3 className="font-semibold text-lg mb-4">{t("nav_finExpenses")}</h3>
 
             <label className="text-sm text-slate-600">{t("fin_date")}</label>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 mb-3" />
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 mb-4" />
 
             <label className="text-sm text-slate-600">Expense type</label>
             <select value={expType} onChange={(e) => { setExpType(e.target.value); setExpAccount(""); }}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 mb-3">
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 mb-4">
               <option value="">All</option>
               <option value="direct">Direct</option>
               <option value="indirect">Indirect</option>
@@ -242,7 +238,7 @@ export default function FinanceExpensesPage() {
 
             <label className="text-sm text-slate-600">{t("fin_account")}</label>
             <select value={expAccount} onChange={(e) => setExpAccount(e.target.value)}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 mb-3">
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 mb-4">
               <option value="">-</option>
               {expenseAccounts.map((a) => (
                 <option key={a.id} value={a.id}>{accountLabel(a, lang)}</option>
@@ -251,18 +247,18 @@ export default function FinanceExpensesPage() {
 
             <label className="text-sm text-slate-600">{t("fin_amount")}</label>
             <input type="number" min={0} value={amount} onChange={(e) => setAmount(e.target.value)}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 mb-3" />
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 mb-4" />
 
             <label className="text-sm text-slate-600">{t("fin_store")}</label>
             <select value={store} onChange={(e) => setStore(e.target.value)}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 mb-3">
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 mb-4">
               <option value="">-</option>
               {stores.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
             </select>
 
             <label className="text-sm text-slate-600">{t("fin_party")}</label>
             <input value={payee} onChange={(e) => setPayee(e.target.value)}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 mb-3" />
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 mb-4" />
 
             <label className="flex items-center gap-2 text-sm mb-3">
               <input type="checkbox" checked={payNow} onChange={(e) => setPayNow(e.target.checked)} />
@@ -273,7 +269,7 @@ export default function FinanceExpensesPage() {
               <>
                 <label className="text-sm text-slate-600">{t("fin_account")}</label>
                 <select value={payAccount} onChange={(e) => setPayAccount(e.target.value)}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 mb-3">
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 mb-4">
                   <option value="">-</option>
                   {cashBank.map((a) => (
                     <option key={a.id} value={a.id}>{accountLabel(a, lang)}</option>
@@ -281,7 +277,7 @@ export default function FinanceExpensesPage() {
                 </select>
                 <label className="text-sm text-slate-600">{t("fin_method")}</label>
                 <select value={method} onChange={(e) => setMethod(e.target.value)}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 mb-3">
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 mb-4">
                   {METHODS.map((m) => (<option key={m} value={m}>{m}</option>))}
                 </select>
               </>
@@ -291,8 +287,8 @@ export default function FinanceExpensesPage() {
             <input value={note} onChange={(e) => setNote(e.target.value)}
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 mb-4" />
 
-            <div className="flex gap-2">
-              <button onClick={() => setOpen(false)}
+            <div className="flex gap-2 sm:col-span-3 mt-2 max-w-sm">
+              <button onClick={openNew}
                 className="flex-1 py-2.5 border border-slate-200 rounded-lg text-sm font-medium">
                 {t("fin_cancel")}
               </button>
@@ -302,8 +298,7 @@ export default function FinanceExpensesPage() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+      </div>
 
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-5 py-2.5 rounded-lg text-sm z-50">
