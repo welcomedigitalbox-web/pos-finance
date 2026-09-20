@@ -9,7 +9,7 @@ import { useAuth } from "@/app/auth-context";
 import { useLanguage } from "@/app/language-context";
 import { hasPermission, hasAnyFinanceAccess, PAGE_OPTIONS } from "@/app/permissions";
 import type { PageKey } from "@/app/permissions";
-import { fmtMMK, today, type Ageing } from "@/lib/finance";
+import { fmtMMK, today } from "@/lib/finance";
 
 type CashRow = Record<string, unknown> & { id: string; balance: number; is_cash: boolean; is_bank: boolean };
 
@@ -20,6 +20,15 @@ type VoucherRow = {
   store_id: string | null;
   reference: string | null;
   total: number | string | null;
+};
+
+type Wallet = Record<string, unknown> & { id: string; balance: number };
+
+type Dash = {
+  sales: number; expenses: number; prev_sales: number; prev_expenses: number;
+  ar: number; ap: number;
+  wallets: Wallet[];
+  pivot: { store: string; channel: string; amount: number }[];
 };
 
 type QuickLink = { key: PageKey; href: string; labelKey: "nav_finSales" | "nav_finVouchers" | "nav_finPayments" | "nav_finReceivables" | "nav_finPayables" };
@@ -79,11 +88,7 @@ export default function FinanceDashboardPage() {
   const [from, setFrom] = useState(monthStart());
   const [to, setTo] = useState(today());
 
-  const [ar, setAr] = useState<Ageing[]>([]);
-  const [ap, setAp] = useState<Ageing[]>([]);
-  const [cash, setCash] = useState<CashRow[]>([]);
-  const [cur, setCur] = useState<VoucherRow[]>([]);
-  const [prev, setPrev] = useState<VoucherRow[]>([]);
+  const [dash, setDash] = useState<Dash | null>(null);
   const [shut, setShut] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -106,20 +111,8 @@ export default function FinanceDashboardPage() {
   if (!profile || !hasPermission(profile, "fin-dashboard")) return null;
 
   async function load() {
-    const span = Math.max(1, daysBetween(from, to));
-    const cols = "id,voucher_date,kind,store_id,reference,total";
-    const [arRes, apRes, cashRes, curRes, prevRes] = await Promise.all([
-      supabase.from("fin_receivables").select("*"),
-      supabase.from("fin_payables").select("*"),
-      supabase.from("fin_cash_balances").select("*"),
-      supabase.from("fin_vouchers").select(cols).gte("voucher_date", from).lte("voucher_date", to).or("status.is.null,status.neq.cancelled"),
-      supabase.from("fin_vouchers").select(cols).gte("voucher_date", shift(from, -span)).lte("voucher_date", shift(from, -1)).or("status.is.null,status.neq.cancelled"),
-    ]);
-    setAr((arRes.data as Ageing[]) || []);
-    setAp((apRes.data as Ageing[]) || []);
-    setCash((cashRes.data as CashRow[]) || []);
-    setCur((curRes.data as VoucherRow[]) || []);
-    setPrev((prevRes.data as VoucherRow[]) || []);
+    const { data } = await supabase.rpc("fin_dashboard", { p_from: from, p_to: to });
+    setDash((data as Dash) || null);
   }
 
   function pickRange(key: string) {
@@ -131,42 +124,30 @@ export default function FinanceDashboardPage() {
     setTo(t2);
   }
 
-  const sum = (rows: Ageing[]) => rows.reduce((s, r) => s + n(r.balance), 0);
-  const vsum = (rows: VoucherRow[]) => rows.reduce((s, r) => s + n(r.total), 0);
-  const sales = (rows: VoucherRow[]) => vsum(rows.filter((r) => r.kind === "sale"));
-  const spend = (rows: VoucherRow[]) => vsum(rows.filter((r) => r.kind === "expense"));
+  const d = dash;
+  const curSale = n(d?.sales);
+  const prevSale = n(d?.prev_sales);
+  const curExp = n(d?.expenses);
+  const prevExp = n(d?.prev_expenses);
+  const arTotal = n(d?.ar);
+  const apTotal = n(d?.ap);
+  const wallets = useMemo(() => d?.wallets || [], [d]);
+  const walletTotal = useMemo(() => wallets.reduce((s2, c) => s2 + n(c.balance), 0), [wallets]);
 
-  const arTotal = useMemo(() => sum(ar), [ar]);
-  const apTotal = useMemo(() => sum(ap), [ap]);
-  const wallets = useMemo(
-    () => cash.filter((c) => (c.is_cash || c.is_bank) && n(c.balance) !== 0),
-    [cash]
-  );
-  const walletTotal = useMemo(() => wallets.reduce((s, c) => s + n(c.balance), 0), [wallets]);
-
-  const curSale = useMemo(() => sales(cur), [cur]);
-  const prevSale = useMemo(() => sales(prev), [prev]);
-  const curExp = useMemo(() => spend(cur), [cur]);
-  const prevExp = useMemo(() => spend(prev), [prev]);
-
-  // Store down the side, channel across the top — the shape a pivot would give.
+  // Every shop gets a line, even the ones that sold nothing today.
   const pivot = useMemo(() => {
-    const chans = new Set<string>();
     const rows: Record<string, Record<string, number>> = {};
-    for (const v of cur) {
-      if (v.kind !== "sale") continue;
-      const c = channelOf(v);
-      const s = v.store_id || "-";
-      chans.add(c);
-      rows[s] = rows[s] || {};
-      rows[s][c] = (rows[s][c] || 0) + n(v.total);
+    const cols = new Set<string>(["Store", "Online"]);
+    for (const st of stores) rows[st.id] = {};
+    for (const r of d?.pivot || []) {
+      cols.add(r.channel);
+      rows[r.store] = rows[r.store] || {};
+      rows[r.store][r.channel] = (rows[r.store][r.channel] || 0) + n(r.amount);
     }
-    const cols = Array.from(chans).sort();
-    const keys = Object.keys(rows).sort(
-      (a, b) => Object.values(rows[b]).reduce((x, y) => x + y, 0) - Object.values(rows[a]).reduce((x, y) => x + y, 0)
-    );
-    return { cols, keys, rows };
-  }, [cur]);
+    const keys = Object.keys(rows).sort((a2, b2) =>
+      Object.values(rows[b2]).reduce((x, y) => x + y, 0) - Object.values(rows[a2]).reduce((x, y) => x + y, 0));
+    return { cols: Array.from(cols), keys, rows };
+  }, [d, stores]);
 
   const storeName = (id: string) => (id === "-" ? "-" : stores.find((s) => s.id === id)?.name || id);
   const accName = (c: CashRow) => String(c.name ?? c.account_name ?? c.code ?? c.id);
@@ -275,7 +256,7 @@ export default function FinanceDashboardPage() {
                   <tr key={k} className="border-t border-slate-100">
                     <td className="px-3 py-2">{storeName(k)}</td>
                     {pivot.cols.map((c) => (
-                      <td key={c} className="px-3 py-2 text-right">{row[c] ? fmtMMK(row[c]) : "-"}</td>
+                      <td key={c} className="px-3 py-2 text-right">{fmtMMK(row[c] || 0)}</td>
                     ))}
                     <td className="px-3 py-2 text-right font-medium">{fmtMMK(tot)}</td>
                   </tr>
