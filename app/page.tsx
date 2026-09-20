@@ -9,12 +9,17 @@ import { useAuth } from "@/app/auth-context";
 import { useLanguage } from "@/app/language-context";
 import { hasPermission, hasAnyFinanceAccess, PAGE_OPTIONS } from "@/app/permissions";
 import type { PageKey } from "@/app/permissions";
-import { fmtMMK, today, type Ageing, errorText } from "@/lib/finance";
-
-type Bucket = "current" | "1-30" | "31-60" | "61-90" | "90+";
-const BUCKETS: Bucket[] = ["current", "1-30", "31-60", "61-90", "90+"];
+import { fmtMMK, today, type Ageing } from "@/lib/finance";
 
 type CashRow = { id: string; balance: number; is_cash: boolean; is_bank: boolean };
+
+type VoucherRow = {
+  id: string;
+  voucher_date: string;
+  kind: string;
+  store_id: string | null;
+  total: number | string | null;
+};
 
 type QuickLink = { key: PageKey; href: string; labelKey: "nav_finSales" | "nav_finVouchers" | "nav_finPayments" | "nav_finReceivables" | "nav_finPayables" };
 
@@ -31,29 +36,20 @@ function monthStart() {
   return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
 }
 
-const BATCH = 500;
+const n = (v: unknown) => Number(v || 0);
 
 export default function FinanceDashboardPage() {
   const { profile } = useAuth();
-  const { storeId, stores } = useStore();
+  const { stores } = useStore();
   const { t } = useLanguage();
   const router = useRouter();
 
   const [ar, setAr] = useState<Ageing[]>([]);
   const [ap, setAp] = useState<Ageing[]>([]);
   const [cash, setCash] = useState<CashRow[]>([]);
-  const [toast, setToast] = useState("");
-
-  const [pullFrom, setPullFrom] = useState(monthStart());
-  const [pullingPo, setPullingPo] = useState(false);
-  const [includeOrdered, setIncludeOrdered] = useState(false);
-  const [pullAll, setPullAll] = useState(false);
-  const [pullTo, setPullTo] = useState(today());
-  const [pulling, setPulling] = useState(false);
+  const [vouchers, setVouchers] = useState<VoucherRow[]>([]);
 
   useEffect(() => {
-    // "/" is this app's own dashboard, so a user without it is sent to the
-    // first page they can open rather than back here in a loop.
     if (profile && !hasPermission(profile, "fin-dashboard")) {
       const first = PAGE_OPTIONS.find((p) => p.href !== "/" && hasPermission(profile, p.key));
       if (first) router.replace(first.href);
@@ -67,134 +63,88 @@ export default function FinanceDashboardPage() {
   }, []);
 
   if (profile && !hasAnyFinanceAccess(profile)) {
-    return (
-      <div className="pt-16 text-center text-slate-500 text-sm">{t("fin_noAccess")}</div>
-    );
+    return <div className="pt-16 text-center text-slate-500 text-sm">{t("fin_noAccess")}</div>;
   }
 
   if (!profile || !hasPermission(profile, "fin-dashboard")) return null;
 
   async function load() {
-    const [arRes, apRes, cashRes] = await Promise.all([
+    // The month so far is what anyone opening this page wants to know.
+    const [arRes, apRes, cashRes, vRes] = await Promise.all([
       supabase.from("fin_receivables").select("*"),
       supabase.from("fin_payables").select("*"),
       supabase.from("fin_cash_balances").select("id,balance,is_cash,is_bank"),
+      supabase.from("fin_vouchers").select("id,voucher_date,kind,store_id,total")
+        .gte("voucher_date", monthStart()).neq("status", "cancelled"),
     ]);
-
     setAr((arRes.data as Ageing[]) || []);
     setAp((apRes.data as Ageing[]) || []);
     setCash((cashRes.data as CashRow[]) || []);
+    setVouchers((vRes.data as VoucherRow[]) || []);
   }
 
-  function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(""), 3500);
-  }
-
-  async function pullPo() {
-    setPullingPo(true);
-    try {
-      const { data, error } = await supabase.rpc("fin_pull_purchase_orders", {
-        p_store: storeId,
-        p_from: pullAll ? null : pullFrom,
-        p_to: pullAll ? null : pullTo,
-        p_include_ordered: includeOrdered,
-        p_limit: BATCH,
-      });
-      if (error) throw error;
-      const res = (data || {}) as { vouchers?: number; payments?: number };
-      const v = res.vouchers ?? 0;
-      showToast(
-        t("fin_pullPoDone")
-          .replace("{v}", String(v))
-          .replace("{p}", String(res.payments ?? 0)) +
-          (v >= BATCH ? " · " + t("fin_pullMore") : "")
-      );
-      await load();
-    } catch (err) {
-      showToast("❌ " + errorText(err));
-    } finally {
-      setPullingPo(false);
-    }
-  }
-
-  async function pullPos() {
-    setPulling(true);
-    try {
-      const { data, error } = await supabase.rpc("fin_pull_pos_sales", {
-        p_store: storeId,
-        p_from: pullAll ? null : pullFrom,
-        p_to: pullAll ? null : pullTo,
-        p_limit: BATCH,
-      });
-      if (error) throw error;
-      const n = Number(data) || 0;
-      showToast(
-        t("fin_pullPosDone").replace("{n}", String(n)) +
-          (n >= BATCH ? " · " + t("fin_pullMore") : "")
-      );
-      await load();
-    } catch (err) {
-      showToast("❌ " + (errorText(err)));
-    } finally {
-      setPulling(false);
-    }
-  }
-
-  const sum = (rows: Ageing[]) => rows.reduce((s, r) => s + Number(r.balance || 0), 0);
+  const sum = (rows: Ageing[]) => rows.reduce((s, r) => s + n(r.balance), 0);
 
   const arTotal = useMemo(() => sum(ar), [ar]);
   const apTotal = useMemo(() => sum(ap), [ap]);
-  const arOverdue = useMemo(() => sum(ar.filter((r) => Number(r.days_overdue) > 0)), [ar]);
-  const apOverdue = useMemo(() => sum(ap.filter((r) => Number(r.days_overdue) > 0)), [ap]);
-  const cashTotal = useMemo(
-    () => cash.filter((c) => c.is_cash).reduce((s, c) => s + Number(c.balance || 0), 0),
-    [cash]
-  );
-  const bankTotal = useMemo(
-    () => cash.filter((c) => c.is_bank).reduce((s, c) => s + Number(c.balance || 0), 0),
-    [cash]
+  const arOverdue = useMemo(() => sum(ar.filter((r) => n(r.days_overdue) > 0)), [ar]);
+  const apOverdue = useMemo(() => sum(ap.filter((r) => n(r.days_overdue) > 0)), [ap]);
+  const cashTotal = useMemo(() => cash.filter((c) => c.is_cash).reduce((s, c) => s + n(c.balance), 0), [cash]);
+  const bankTotal = useMemo(() => cash.filter((c) => c.is_bank).reduce((s, c) => s + n(c.balance), 0), [cash]);
+
+  const vsum = (rows: VoucherRow[]) => rows.reduce((s, r) => s + n(r.total), 0);
+  const monthSale = useMemo(() => vsum(vouchers.filter((v) => v.kind === "sale")), [vouchers]);
+  const monthExp = useMemo(() => vsum(vouchers.filter((v) => v.kind === "expense")), [vouchers]);
+  const todaySale = useMemo(
+    () => vsum(vouchers.filter((v) => v.kind === "sale" && v.voucher_date === today())),
+    [vouchers]
   );
 
-  const ageing = useMemo(
-    () =>
-      BUCKETS.map((b) => ({
-        bucket: b,
-        receivable: sum(ar.filter((r) => r.ageing_bucket === b)),
-        payable: sum(ap.filter((r) => r.ageing_bucket === b)),
-      })),
-    [ar, ap]
-  );
+  const byStore = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const v of vouchers) if (v.kind === "sale") {
+      const k = v.store_id || "-";
+      m[k] = (m[k] || 0) + n(v.total);
+    }
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  }, [vouchers]);
 
-  const storeName = (id: string | null) => (id ? stores.find((s) => s.id === id)?.name || id : "-");
+  const topDebtors = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const r of ar) {
+      const k = r.party_name || "-";
+      m[k] = (m[k] || 0) + n(r.balance);
+    }
+    return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  }, [ar]);
+
+  const storeName = (id: string) => (id === "-" ? "-" : stores.find((s) => s.id === id)?.name || id);
+
+  const Card = ({ label, value, sub, tone }: { label: string; value: number; sub?: string; tone?: string }) => (
+    <div className="bg-white border border-slate-200 rounded-xl p-3">
+      <div className="text-xs text-slate-500 uppercase">{label}</div>
+      <div className={"text-lg font-bold mt-1 " + (tone || "")}>{fmtMMK(value)}</div>
+      {sub && <div className="text-xs text-orange-600 mt-1">{sub}</div>}
+    </div>
+  );
 
   return (
     <div className="pt-4">
       <h2 className="font-semibold text-lg mb-4">{t("fin_dashTitle")}</h2>
 
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+        <Card label={t("fin_arTotal")} value={arTotal} sub={t("fin_overdue") + ": " + fmtMMK(arOverdue)} />
+        <Card label={t("fin_apTotal")} value={apTotal} sub={t("fin_overdue") + ": " + fmtMMK(apOverdue)} />
+        <Card label={t("fin_cashTotal")} value={cashTotal} tone="text-green-700" />
+        <Card label={t("fin_bankTotal")} value={bankTotal} tone="text-green-700" />
+      </div>
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-        <div className="bg-white border border-slate-200 rounded-xl p-3">
-          <div className="text-xs text-slate-500 uppercase">{t("fin_arTotal")}</div>
-          <div className="text-lg font-bold mt-1">{fmtMMK(arTotal)}</div>
-          <div className="text-xs text-orange-600 mt-1">
-            {t("fin_overdue")}: {fmtMMK(arOverdue)}
-          </div>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-xl p-3">
-          <div className="text-xs text-slate-500 uppercase">{t("fin_apTotal")}</div>
-          <div className="text-lg font-bold mt-1">{fmtMMK(apTotal)}</div>
-          <div className="text-xs text-orange-600 mt-1">
-            {t("fin_overdue")}: {fmtMMK(apOverdue)}
-          </div>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-xl p-3">
-          <div className="text-xs text-slate-500 uppercase">{t("fin_cashTotal")}</div>
-          <div className="text-lg font-bold mt-1 text-green-700">{fmtMMK(cashTotal)}</div>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-xl p-3">
-          <div className="text-xs text-slate-500 uppercase">{t("fin_bankTotal")}</div>
-          <div className="text-lg font-bold mt-1 text-green-700">{fmtMMK(bankTotal)}</div>
-        </div>
+        <Card label="Sales today" value={todaySale} />
+        <Card label="Sales this month" value={monthSale} />
+        <Card label="Expenses this month" value={monthExp} tone="text-orange-700" />
+        <Card label="Net this month" value={monthSale - monthExp}
+          tone={monthSale - monthExp >= 0 ? "text-green-700" : "text-red-600"} />
       </div>
 
       <div className="flex flex-wrap gap-2 mb-5">
@@ -206,89 +156,48 @@ export default function FinanceDashboardPage() {
         ))}
       </div>
 
-      <h3 className="font-semibold mb-2">{t("fin_ageing")}</h3>
-      <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto mb-6">
-        <table className="w-full text-sm min-w-[420px]">
-          <thead className="bg-slate-50 text-slate-500">
-            <tr>
-              <th className="text-left px-3 py-2">{t("fin_ageing")}</th>
-              <th className="text-right px-3 py-2">{t("fin_arTotal")}</th>
-              <th className="text-right px-3 py-2">{t("fin_apTotal")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ageing.map((row) => (
-              <tr key={row.bucket} className="border-t border-slate-100">
-                <td className="px-3 py-2 font-medium">{row.bucket}</td>
-                <td className="px-3 py-2 text-right">{fmtMMK(row.receivable)}</td>
-                <td className="px-3 py-2 text-right">{fmtMMK(row.payable)}</td>
-              </tr>
-            ))}
-            <tr className="border-t border-slate-200 bg-slate-50 font-semibold">
-              <td className="px-3 py-2">{t("fin_total")}</td>
-              <td className="px-3 py-2 text-right">{fmtMMK(arTotal)}</td>
-              <td className="px-3 py-2 text-right">{fmtMMK(apTotal)}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div>
+          <h3 className="font-semibold mb-2">Sales this month by store</h3>
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+            <table className="w-full text-sm">
+              <tbody>
+                {byStore.map(([id, amt]) => (
+                  <tr key={id} className="border-t border-slate-100 first:border-t-0">
+                    <td className="px-3 py-2">{storeName(id)}</td>
+                    <td className="px-3 py-2 text-right font-medium">{fmtMMK(amt)}</td>
+                  </tr>
+                ))}
+                {byStore.length === 0 && (
+                  <tr><td className="px-3 py-6 text-center text-slate-400" colSpan={2}>{t("fin_empty")}</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl p-4 mb-6">
-        <h3 className="font-semibold mb-1">{t("fin_pullPos")}</h3>
-        <p className="text-sm text-slate-500 mb-3">{t("fin_pullPosHint")}</p>
-        <div className="flex flex-wrap items-end gap-2">
-          <div>
-            <label className="text-xs text-slate-500">{t("fin_from")}</label>
-            <input type="date" value={pullFrom} onChange={(e) => setPullFrom(e.target.value)}
-              className="block border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" />
+        <div>
+          <h3 className="font-semibold mb-2">Who owes the most</h3>
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+            <table className="w-full text-sm">
+              <tbody>
+                {topDebtors.map(([name, amt]) => (
+                  <tr key={name} className="border-t border-slate-100 first:border-t-0">
+                    <td className="px-3 py-2">{name}</td>
+                    <td className="px-3 py-2 text-right font-medium">{fmtMMK(amt)}</td>
+                  </tr>
+                ))}
+                {topDebtors.length === 0 && (
+                  <tr><td className="px-3 py-6 text-center text-slate-400" colSpan={2}>{t("fin_empty")}</td></tr>
+                )}
+              </tbody>
+            </table>
           </div>
-          <div>
-            <label className="text-xs text-slate-500">{t("fin_to")}</label>
-            <input type="date" value={pullTo} onChange={(e) => setPullTo(e.target.value)}
-              className="block border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" />
-          </div>
-          <div>
-            <label className="text-xs text-slate-500">{t("fin_store")}</label>
-            <div className="text-sm px-3 py-2 border border-slate-200 rounded-lg bg-slate-50">
-              {storeName(storeId)}
-            </div>
-          </div>
-          <label className="flex items-center gap-2 text-sm text-slate-600 py-2">
-            <input type="checkbox" checked={pullAll}
-              onChange={(e) => setPullAll(e.target.checked)} />
-            {t("fin_pullAll")}
-          </label>
-          <button onClick={pullPos} disabled={pulling || !storeId}
-            className="px-4 py-2.5 bg-slate-900 disabled:bg-slate-300 text-white rounded-lg text-sm font-semibold">
-            {pulling ? "..." : t("fin_pullPos")}
-          </button>
+          <Link href="/receivables" className="text-blue-600 text-sm font-medium inline-block mt-2">
+            {t("nav_finReceivables")} →
+          </Link>
         </div>
       </div>
-
-      <div className="bg-white border border-slate-200 rounded-xl p-4 mb-6">
-        <h3 className="font-semibold mb-1">{t("fin_pullPo")}</h3>
-        <p className="text-sm text-slate-500 mb-3">{t("fin_pullPoHint")}</p>
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="flex items-center gap-2 text-sm text-slate-600 py-2">
-            <input type="checkbox" checked={includeOrdered}
-              onChange={(e) => setIncludeOrdered(e.target.checked)} />
-            {t("fin_includeOrdered")}
-          </label>
-          <button onClick={pullPo} disabled={pullingPo || !storeId}
-            className="px-4 py-2.5 bg-slate-900 disabled:bg-slate-300 text-white rounded-lg text-sm font-semibold">
-            {pullingPo ? "..." : t("fin_pullPo")}
-          </button>
-        </div>
-        <p className="text-xs text-slate-400 mt-2">
-          {pullAll ? t("fin_pullAll") : `${t("fin_from")} / ${t("fin_to")}: ${pullFrom} — ${pullTo}`}
-        </p>
-      </div>
-
-      {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-5 py-2.5 rounded-lg text-sm z-50">
-          {toast}
-        </div>
-      )}
     </div>
   );
 }
