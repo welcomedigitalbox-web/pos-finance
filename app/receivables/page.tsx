@@ -102,19 +102,6 @@ export default function FinanceReceivablesPage() {
     return map;
   }, [visible]);
 
-  const byParty = useMemo(() => {
-    const map = new Map<string, { name: string; count: number; balance: number; oldest: number }>();
-    for (const r of visible) {
-      const key = r.party_id || r.party_name || "-";
-      const cur = map.get(key) || { name: r.party_name || "-", count: 0, balance: 0, oldest: 0 };
-      cur.count += 1;
-      cur.balance += Number(r.balance || 0);
-      cur.oldest = Math.max(cur.oldest, Number(r.days_overdue || 0));
-      map.set(key, cur);
-    }
-    return Array.from(map.values()).sort((a, b) => b.balance - a.balance);
-  }, [visible]);
-
   const chosen = visible.filter((r) => sel.has(r.id));
   const chosenTotal = chosen.reduce((s2, r) => s2 + Number(r.balance || 0), 0);
   const allShown = visible.length > 0 && chosen.length === visible.length;
@@ -305,34 +292,6 @@ export default function FinanceReceivablesPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-      </div>
-
-      <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto mb-6">
-        <table className="w-full text-sm min-w-[520px]">
-          <thead className="bg-slate-50 text-slate-500">
-            <tr>
-              <th className="text-left px-3 py-2">{t("fin_customer")}</th>
-              <th className="text-right px-3 py-2">{t("fin_no")}</th>
-              <th className="text-right px-3 py-2">{t("fin_outstanding")}</th>
-              <th className="text-right px-3 py-2">{t("fin_daysOverdue")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {byParty.map((p, i) => (
-              <tr key={i} className="border-t border-slate-100">
-                <td className="px-3 py-2 font-medium">{p.name}</td>
-                <td className="px-3 py-2 text-right text-slate-500">{p.count}</td>
-                <td className="px-3 py-2 text-right font-semibold">{fmtMMK(p.balance)}</td>
-                <td className={`px-3 py-2 text-right ${p.oldest > 0 ? "text-orange-600 font-medium" : "text-slate-400"}`}>
-                  {p.oldest > 0 ? p.oldest : "-"}
-                </td>
-              </tr>
-            ))}
-            {!loading && byParty.length === 0 && (
-              <tr><td colSpan={4} className="text-center text-slate-400 py-8">{t("fin_empty")}</td></tr>
-            )}
-          </tbody>
-        </table>
       </div>
 
       <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto">
