@@ -181,12 +181,11 @@ export default function FinancePaymentsPage() {
     const code = invNo.trim();
     if (!code || !modalDir) return;
     setInvBusy(true);
-    const { data } = await supabase
-      .from(modalDir === "in" ? "fin_receivables" : "fin_payables")
-      .select("*")
-      .ilike("voucher_no", "%" + code + "%")
-      .limit(5);
-    const hits = (data as Ageing[]) || [];
+    const { data } = await supabase.rpc("fin_doc_lookup", { p_code: code });
+    const found = ((data as unknown as (Ageing & {
+      voucher_id: string; doc_no: string; party_id?: string | null; party_name?: string | null;
+    })[]) || []).filter((v) => Number(v.balance || 0) > 0);
+    const hits = found.map((v) => ({ ...v, id: v.voucher_id })) as Ageing[];
     if (!hits.length) {
       setInvBusy(false);
       showToast("No unpaid invoice matches " + code);
