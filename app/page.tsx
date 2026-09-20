@@ -112,8 +112,8 @@ export default function FinanceDashboardPage() {
       supabase.from("fin_receivables").select("*"),
       supabase.from("fin_payables").select("*"),
       supabase.from("fin_cash_balances").select("*"),
-      supabase.from("fin_vouchers").select(cols).gte("voucher_date", from).lte("voucher_date", to).neq("status", "cancelled"),
-      supabase.from("fin_vouchers").select(cols).gte("voucher_date", shift(from, -span)).lte("voucher_date", shift(from, -1)).neq("status", "cancelled"),
+      supabase.from("fin_vouchers").select(cols).gte("voucher_date", from).lte("voucher_date", to).or("status.is.null,status.neq.cancelled"),
+      supabase.from("fin_vouchers").select(cols).gte("voucher_date", shift(from, -span)).lte("voucher_date", shift(from, -1)).or("status.is.null,status.neq.cancelled"),
     ]);
     setAr((arRes.data as Ageing[]) || []);
     setAp((apRes.data as Ageing[]) || []);
@@ -239,9 +239,10 @@ export default function FinanceDashboardPage() {
           extra={<span className="text-xs text-slate-500">{t("fin_apTotal")}: {fmtMMK(apTotal)}</span>} />
       </div>
 
-      <Section id="cash" title="Where the money sits">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+      <Section id="cash" title="Balances">
         <div className="bg-white border border-slate-200 rounded-xl p-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1">
+          <div className="space-y-1">
             {wallets.map((c) => (
               <div key={c.id} className="flex justify-between text-sm">
                 <span className="text-slate-600">{accName(c)}</span>
@@ -258,7 +259,7 @@ export default function FinanceDashboardPage() {
 
       <Section id="pivot" title="Sales by store and channel">
         <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto">
-          <table className="w-full text-sm min-w-[420px]">
+          <table className="w-full text-sm min-w-[360px]">
             <thead className="bg-slate-50 text-slate-500">
               <tr>
                 <th className="text-left px-3 py-2">{t("fin_store")}</th>
@@ -296,6 +297,8 @@ export default function FinanceDashboardPage() {
           </table>
         </div>
       </Section>
+
+      </div>
 
       <div className="flex flex-wrap gap-2">
         {QUICK_LINKS.filter((l) => hasPermission(profile, l.key)).map((l) => (
