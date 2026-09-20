@@ -241,8 +241,6 @@ export default function FinanceDashboardPage() {
           ))}
         </div>
       </div>
-        </div>
-      </div>
 
       <div className="flex flex-wrap gap-2 mb-5">
         {QUICK_LINKS.filter((l) => hasPermission(profile, l.key)).map((l) => (
