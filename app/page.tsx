@@ -166,7 +166,7 @@ export default function FinanceDashboardPage() {
   function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
     const closed = !!shut[id];
     return (
-      <div className="mb-5">
+      <div className="mb-5 flex flex-col h-full">
         <button onClick={() => setShut({ ...shut, [id]: !closed })}
           className="flex items-center gap-2 font-semibold mb-2">
           <span className="text-slate-400 text-xs">{closed ? "▶" : "▼"}</span>
@@ -220,9 +220,9 @@ export default function FinanceDashboardPage() {
           extra={<span className="text-xs text-slate-500">{t("fin_apTotal")}: {fmtMMK(apTotal)}</span>} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <Section id="cash" title="Balances">
-        <div className="bg-white border border-slate-200 rounded-xl p-4">
+        <div className="bg-white border border-slate-200 rounded-xl p-4 flex-1 flex flex-col">
           <div className="space-y-1">
             {wallets.map((c) => (
               <div key={c.id} className="flex justify-between text-sm">
@@ -239,7 +239,7 @@ export default function FinanceDashboardPage() {
       </Section>
 
       <Section id="pivot" title="Sales by store and channel">
-        <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto">
+        <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto flex-1">
           <table className="w-full text-sm min-w-[360px]">
             <thead className="bg-slate-50 text-slate-500">
               <tr>
