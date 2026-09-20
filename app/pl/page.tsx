@@ -139,11 +139,16 @@ export default function PLPage() {
         <p className="text-sm text-slate-500">{from} — {to} · {store ? storeName(store) : "All stores"}</p>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
         <div className="bg-white border border-slate-200 rounded-xl p-3">
           <div className="text-xs text-slate-500 uppercase">Sales</div>
           <div className="text-lg font-bold mt-1">{fmtMMK(inc)}</div>
           <Delta now={inc} before={pInc} />
+        </div>
+        <div className="bg-white border border-slate-200 rounded-xl p-3">
+          <div className="text-xs text-slate-500 uppercase">Cost of goods</div>
+          <div className="text-lg font-bold mt-1 text-orange-700">{fmtMMK(cogs)}</div>
+          {cogs ? <Delta now={cogs} before={pCogs} /> : <div className="text-xs text-slate-400">waiting on product costs</div>}
         </div>
         <div className="bg-white border border-slate-200 rounded-xl p-3">
           <div className="text-xs text-slate-500 uppercase">Gross profit</div>
