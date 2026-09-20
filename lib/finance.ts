@@ -143,7 +143,7 @@ export type FinDocument = {
   created_at: string;
 };
 
-export type Ageing = { id: string; voucher_no: string; voucher_date: string; due_date: string | null;
+export type Ageing = { id: string; voucher_no: string; doc_no?: string | null; voucher_date: string; due_date: string | null;
   store_id: string | null; channel: Channel | null; party_id: string | null; party_name: string | null;
   sale_rep_name?: string | null; total: number; paid_amount: number; discount_taken: number;
   balance: number; status: VoucherStatus; days_overdue: number; ageing_bucket: string };

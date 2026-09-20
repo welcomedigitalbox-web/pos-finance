@@ -82,7 +82,8 @@ export default function FinanceReceivablesPage() {
       if (bucket && r.ageing_bucket !== bucket) return false;
       if (overdueOnly && Number(r.days_overdue || 0) <= 0) return false;
       if (q && !(r.party_name || "").toLowerCase().includes(q) &&
-          !r.voucher_no.toLowerCase().includes(q)) return false;
+          !r.voucher_no.toLowerCase().includes(q) &&
+          !(r.doc_no || "").toLowerCase().includes(q)) return false;
       return true;
     });
   }, [rows, search, bucket, overdueOnly]);
@@ -263,6 +264,7 @@ export default function FinanceReceivablesPage() {
         <table className="w-full text-sm min-w-[1100px]">
           <thead className="bg-slate-50 text-slate-500">
             <tr>
+              <th className="text-left px-3 py-2">Doc no.</th>
               <th className="text-left px-3 py-2">{t("fin_no")}</th>
               <th className="text-left px-3 py-2">{t("fin_date")}</th>
               <th className="text-left px-3 py-2">{t("fin_dueDate")}</th>
@@ -279,13 +281,14 @@ export default function FinanceReceivablesPage() {
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={12} className="text-center text-slate-400 py-8">{t("fin_loading")}</td></tr>
+              <tr><td colSpan={13} className="text-center text-slate-400 py-8">{t("fin_loading")}</td></tr>
             )}
             {!loading && visible.map((r) => (
               <tr
                 key={r.id}
                 className={`border-t border-slate-100 ${Number(r.days_overdue || 0) > 0 ? "bg-orange-50/40" : ""}`}
               >
+                <td className="px-3 py-2 font-medium text-xs">{r.doc_no || "-"}</td>
                 <td className="px-3 py-2 font-mono text-xs">{r.voucher_no}</td>
                 <td className="px-3 py-2">{r.voucher_date}</td>
                 <td className="px-3 py-2 text-slate-500">{r.due_date || "-"}</td>
@@ -307,7 +310,7 @@ export default function FinanceReceivablesPage() {
               </tr>
             ))}
             {!loading && visible.length === 0 && (
-              <tr><td colSpan={12} className="text-center text-slate-400 py-8">{t("fin_empty")}</td></tr>
+              <tr><td colSpan={13} className="text-center text-slate-400 py-8">{t("fin_empty")}</td></tr>
             )}
           </tbody>
         </table>
