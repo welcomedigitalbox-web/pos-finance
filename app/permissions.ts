@@ -8,6 +8,7 @@ export type PageKey =
   | "fin-dashboard"
   | "fin-sales"
   | "fin-vouchers"
+  | "fin-expenses"
   | "fin-payments"
   | "fin-receivables"
   | "fin-payables"
@@ -39,6 +40,7 @@ export const PAGE_OPTIONS: { key: PageKey; href: string; labelKey: string; group
   { key: "fin-dashboard", href: "/", labelKey: "nav_finDashboard", group: "entry" },
   { key: "fin-sales", href: "/sales", labelKey: "nav_finSales", group: "entry" },
   { key: "fin-vouchers", href: "/vouchers", labelKey: "nav_finVouchers", group: "entry" },
+  { key: "fin-expenses", href: "/expenses", labelKey: "nav_finExpenses", group: "entry" },
   { key: "fin-payments", href: "/payments", labelKey: "nav_finPayments", group: "entry" },
   { key: "fin-documents", href: "/documents", labelKey: "nav_finDocuments", group: "entry" },
   { key: "fin-receivables", href: "/receivables", labelKey: "nav_finReceivables", group: "outstanding" },
@@ -94,7 +96,7 @@ export function canPost(profile: FinanceUserLike | null): boolean {
 
 // Pages an accountant starts with when an administrator creates them.
 export const DEFAULT_ACCOUNTANT_PAGES: PageKey[] = [
-  "fin-dashboard", "fin-sales", "fin-vouchers", "fin-payments", "fin-documents",
+  "fin-dashboard", "fin-sales", "fin-vouchers", "fin-expenses", "fin-payments", "fin-documents",
   "fin-receivables", "fin-payables", "fin-cashbook", "fin-bank",
   "fin-ledger", "fin-trial-balance",
 ];
