@@ -30,6 +30,7 @@ export default function NewExpensePage() {
   const [amount, setAmount] = useState("");
   const [store, setStore] = useState("");
   const [dept, setDept] = useState("");
+  const whereSet = !!store || !!dept;
   const [depts, setDepts] = useState<{ v: string; label: string }[]>([]);
   const [payee, setPayee] = useState("");
   const [note, setNote] = useState("");
@@ -150,24 +151,24 @@ export default function NewExpensePage() {
 
       <div className="bg-white border border-slate-200 rounded-xl p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="text-sm text-slate-600">{t("fin_date")}</label>
-          <input type="date" className={FIELD} value={date} onChange={(e) => setDate(e.target.value)} />
-        </div>
-        <div>
           <label className="text-sm text-slate-600">{t("fin_store")}</label>
-          <select className={FIELD} value={store} onChange={(e) => setStore(e.target.value)}>
+          <select className={FIELD}  value={store} onChange={(e) => setStore(e.target.value)}>
             <option value="">-</option>
             {stores.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
           </select>
           <label className="text-sm text-slate-600">Department</label>
-          <select className={FIELD} value={dept} onChange={(e) => setDept(e.target.value)}>
+          <select className={FIELD}  value={dept} onChange={(e) => setDept(e.target.value)}>
             <option value="">-</option>
             {depts.map((d) => (<option key={d.v} value={d.v}>{d.label}</option>))}
           </select>
+          <label className="text-sm text-slate-600">{t("fin_date")}</label>
+          <input type="date" className={FIELD} disabled={!whereSet} value={date} onChange={(e) => setDate(e.target.value)} />
+        </div>
+        <div>
         </div>
         <div>
           <label className="text-sm text-slate-600">Expense type</label>
-          <select className={FIELD} value={expType}
+          <select className={FIELD} disabled={!whereSet} value={expType}
             onChange={(e) => { setExpType(e.target.value); setExpAccount(""); }}>
             <option value="">All</option>
             <option value="direct">Direct</option>
@@ -176,7 +177,7 @@ export default function NewExpensePage() {
         </div>
         <div>
           <label className="text-sm text-slate-600">{t("fin_account")}</label>
-          <select className={FIELD} value={expAccount} onChange={(e) => setExpAccount(e.target.value)}>
+          <select className={FIELD} disabled={!whereSet} value={expAccount} onChange={(e) => setExpAccount(e.target.value)}>
             <option value="">-</option>
             {expenseAccounts.map((a) => (
               <option key={a.id} value={a.id}>{accountLabel(a, lang)}</option>
@@ -185,12 +186,12 @@ export default function NewExpensePage() {
         </div>
         <div>
           <label className="text-sm text-slate-600">{t("fin_amount")}</label>
-          <input type="number" min={0} className={FIELD} value={amount}
+          <input type="number" min={0} className={FIELD} disabled={!whereSet} value={amount}
             onChange={(e) => setAmount(e.target.value)} />
         </div>
         <div>
           <label className="text-sm text-slate-600">{t("fin_party")}</label>
-          <input className={FIELD} value={payee} onChange={(e) => setPayee(e.target.value)} />
+          <input className={FIELD} disabled={!whereSet} value={payee} onChange={(e) => setPayee(e.target.value)} />
         </div>
 
         <div className="sm:col-span-2 border-t border-slate-100 pt-4">
@@ -204,7 +205,7 @@ export default function NewExpensePage() {
           <>
             <div>
               <label className="text-sm text-slate-600">{t("fin_account")}</label>
-              <select className={FIELD} value={payAccount} onChange={(e) => pickPayAccount(e.target.value)}>
+              <select className={FIELD} disabled={!whereSet} value={payAccount} onChange={(e) => pickPayAccount(e.target.value)}>
                 <option value="">-</option>
                 {cashBank.map((a) => (
                   <option key={a.id} value={a.id}>{accountLabel(a, lang)}</option>
@@ -213,7 +214,7 @@ export default function NewExpensePage() {
             </div>
             <div>
               <label className="text-sm text-slate-600">{t("fin_method")}</label>
-              <select className={FIELD} value={method} onChange={(e) => setMethod(e.target.value)}>
+              <select className={FIELD} disabled={!whereSet} value={method} onChange={(e) => setMethod(e.target.value)}>
                 {methodList.map((m) => (<option key={m.code} value={m.code}>{m.label}</option>))}
               </select>
             </div>
@@ -222,7 +223,7 @@ export default function NewExpensePage() {
 
         <div className="sm:col-span-2">
           <label className="text-sm text-slate-600">{t("fin_note")}</label>
-          <input className={FIELD} value={note} onChange={(e) => setNote(e.target.value)} />
+          <input className={FIELD} disabled={!whereSet} value={note} onChange={(e) => setNote(e.target.value)} />
         </div>
 
         <div className="sm:col-span-2 flex gap-2 pt-2">
@@ -230,7 +231,7 @@ export default function NewExpensePage() {
             className="px-5 py-2.5 border border-slate-200 rounded-lg text-sm font-medium">
             {t("fin_cancel")}
           </button>
-          <button onClick={save} disabled={saving}
+          <button onClick={save} disabled={saving || !whereSet}
             className="px-6 py-2.5 bg-slate-900 disabled:bg-slate-300 text-white rounded-lg text-sm font-semibold">
             {saving ? "..." : t("fin_save")}
           </button>
