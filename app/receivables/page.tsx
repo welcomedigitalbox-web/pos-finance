@@ -49,9 +49,15 @@ export default function FinanceReceivablesPage() {
 
   const [courierRows, setCourierRows] = useState<{ courier: string; courier_id: string | null; orders: number; outstanding: number }[]>([]);
   const [courierPick, setCourierPick] = useState<string | null>(null);
+  const [courierOf, setCourierOf] = useState<Record<string, string>>({});
 
   // Money on its way back from a courier is still money owed to us.
   useEffect(() => {
+    supabase.from("fin_voucher_courier").select("*").then(({ data }) => {
+      const m: Record<string, string> = {};
+      for (const r of ((data || []) as { voucher_id: string; courier: string }[])) m[r.voucher_id] = r.courier;
+      setCourierOf(m);
+    });
     supabase.from("fin_courier_cod").select("*").then(({ data }) => {
       setCourierRows((data as never) || []);
     });
@@ -90,6 +96,11 @@ export default function FinanceReceivablesPage() {
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
+
+  // Picking a courier narrows the list to what that courier is carrying.
+  const visibleByCourier = courierPick
+    ? visible.filter((r) => (courierOf[String(r.id)] || "ရုံး/ဆိုင်ကိုယ်တိုင်") === courierPick)
+    : visible;
     return rows.filter((r) => {
       if (bucket && r.ageing_bucket !== bucket) return false;
       if (overdueOnly && Number(r.days_overdue || 0) <= 0) return false;
@@ -125,7 +136,7 @@ export default function FinanceReceivablesPage() {
   }
 
   function toggleAll() {
-    setSel(allShown ? new Set() : new Set(visible.map((r) => r.id)));
+    setSel(allShown ? new Set() : new Set(visibleByCourier.map((r) => r.id)));
   }
 
   function openBulk() {
@@ -348,7 +359,7 @@ export default function FinanceReceivablesPage() {
             {loading && (
               <tr><td colSpan={14} className="text-center text-slate-400 py-8">{t("fin_loading")}</td></tr>
             )}
-            {!loading && visible.map((r) => (
+            {!loading && visibleByCourier.map((r) => (
               <tr
                 key={r.id}
                 className={`border-t border-slate-100 ${Number(r.days_overdue || 0) > 0 ? "bg-orange-50/40" : ""}`}
