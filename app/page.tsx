@@ -150,7 +150,7 @@ export default function FinanceDashboardPage() {
   }, [d, stores]);
 
   const storeName = (id: string) => (id === "-" ? "-" : stores.find((s) => s.id === id)?.name || id);
-  const accName = (c: CashRow) => String(c.name ?? c.account_name ?? c.code ?? c.id);
+  const accName = (c: Wallet) => String(c.name ?? c.account_name ?? c.code ?? c.id);
 
   function Delta({ now, before }: { now: number; before: number }) {
     if (!before) return <span className="text-xs text-slate-400">-</span>;
