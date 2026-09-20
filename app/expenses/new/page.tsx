@@ -30,7 +30,14 @@ export default function NewExpensePage() {
   const [amount, setAmount] = useState("");
   const [store, setStore] = useState("");
   const [dept, setDept] = useState("");
-  const whereSet = !!store || !!dept;
+  // A cost lands on a shop or on a department, never on both.
+  const [scope, setScope] = useState("");
+  const whereSet = scope === "store" ? !!store : scope === "dept" ? !!dept : false;
+  function pickScope(v: string) {
+    setScope(v);
+    if (v !== "store") setStore("");
+    if (v !== "dept") setDept("");
+  }
   const [depts, setDepts] = useState<{ v: string; label: string }[]>([]);
   const [payee, setPayee] = useState("");
   const [note, setNote] = useState("");
@@ -151,16 +158,27 @@ export default function NewExpensePage() {
 
       <div className="bg-white border border-slate-200 rounded-xl p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
+          <label className="text-sm text-slate-600">Charge to</label>
+          <select className={FIELD} value={scope} onChange={(e) => pickScope(e.target.value)}>
+            <option value="">-</option>
+            <option value="store">{t("fin_store")}</option>
+            <option value="dept">Department</option>
+          </select>
+          {scope === "store" && (<>
           <label className="text-sm text-slate-600">{t("fin_store")}</label>
           <select className={FIELD}  value={store} onChange={(e) => setStore(e.target.value)}>
             <option value="">-</option>
             {stores.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
           </select>
+          </>)}
+          {scope === "dept" && (<>
           <label className="text-sm text-slate-600">Department</label>
           <select className={FIELD}  value={dept} onChange={(e) => setDept(e.target.value)}>
             <option value="">-</option>
             {depts.map((d) => (<option key={d.v} value={d.v}>{d.label}</option>))}
           </select>
+          </>)}
+
           <label className="text-sm text-slate-600">{t("fin_date")}</label>
           <input type="date" className={FIELD} disabled={!whereSet} value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
