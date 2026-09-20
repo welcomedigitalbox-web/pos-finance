@@ -1,5 +1,7 @@
 "use client";
 
+import * as XLSX from "xlsx";
+
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -141,7 +143,16 @@ export default function FinanceImportPage() {
     setFileName(file.name);
     setDone(null);
     setFailures([]);
-    const text = await file.text();
+    // A workbook is read as the csv it would have been, so a client can send
+    // the file they already have and nobody has to think about encodings.
+    const isBook = /\.xlsx?$/i.test(file.name);
+    const text = isBook
+      ? XLSX.utils.sheet_to_csv(
+          XLSX.read(await file.arrayBuffer()).Sheets[
+            XLSX.read(await file.arrayBuffer()).SheetNames[0]
+          ]
+        )
+      : await file.text();
     const grid = parseCsv(text);
     if (grid.length === 0) {
       setHeader([]);
@@ -278,7 +289,7 @@ export default function FinanceImportPage() {
           </button>
           <div>
             <label className="text-xs text-slate-500 block mb-1">CSV</label>
-            <input type="file" accept=".csv,.txt,text/csv"
+            <input type="file" accept=".csv,.txt,.xlsx,.xls,text/csv"
               onChange={(e) => onFile(e.target.files?.[0])}
               className="text-sm" />
           </div>
