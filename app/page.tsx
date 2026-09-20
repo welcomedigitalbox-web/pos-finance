@@ -220,19 +220,27 @@ export default function FinanceDashboardPage() {
         <Card label={t("fin_arTotal")} value={arTotal} extra={<span className="text-xs text-slate-500">{t("fin_apTotal")}: {fmtMMK(apTotal)}</span>} />
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-        <Card label={t("fin_cashTotal")} value={cashTotal} tone="text-green-700" />
-        <Card label={t("fin_bankTotal")} value={bankTotal} tone="text-green-700" />
-        <div className="bg-white border border-slate-200 rounded-xl p-3 col-span-2">
-          <div className="text-xs text-slate-500 uppercase mb-1">Where the money sits</div>
-          <div className="space-y-1">
-            {cash.filter((c) => c.is_cash || c.is_bank).map((c) => (
-              <div key={c.id} className="flex justify-between text-sm">
-                <span className="text-slate-600">{accName(c)}</span>
-                <span className="font-medium">{fmtMMK(n(c.balance))}</span>
-              </div>
-            ))}
+      <div className="bg-white border border-slate-200 rounded-xl p-4 mb-5">
+        <div className="flex flex-wrap gap-6 pb-3 border-b border-slate-100">
+          <div>
+            <div className="text-xs text-slate-500 uppercase">{t("fin_cashTotal")}</div>
+            <div className="text-lg font-bold text-green-700">{fmtMMK(cashTotal)}</div>
           </div>
+          <div>
+            <div className="text-xs text-slate-500 uppercase">{t("fin_bankTotal")}</div>
+            <div className="text-lg font-bold text-green-700">{fmtMMK(bankTotal)}</div>
+          </div>
+        </div>
+        {/* only the wallets holding something are worth a line */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1 pt-3">
+          {cash.filter((c) => (c.is_cash || c.is_bank) && n(c.balance) !== 0).map((c) => (
+            <div key={c.id} className="flex justify-between text-sm">
+              <span className="text-slate-600">{accName(c)}</span>
+              <span className="font-medium">{fmtMMK(n(c.balance))}</span>
+            </div>
+          ))}
+        </div>
+      </div>
         </div>
       </div>
 
