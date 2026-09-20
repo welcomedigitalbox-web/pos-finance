@@ -68,6 +68,7 @@ export default function FinancePaymentsPage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [search, setSearch] = useState("");
+  const [docMatches, setDocMatches] = useState<Set<string>>(new Set());
 
   const [detail, setDetail] = useState<PaymentRow | null>(null);
   const [detailAllocs, setDetailAllocs] = useState<AllocationRow[]>([]);
@@ -121,6 +122,27 @@ export default function FinancePaymentsPage() {
     setRows((data as PaymentRow[]) || []);
     setLoading(false);
   }
+
+  // A customer quotes their order number, not our payment number. Resolve it
+  // to the voucher, then to whatever payments were allocated against it.
+  useEffect(() => {
+    const code = search.trim();
+    if (code.length < 3) { setDocMatches(new Set()); return; }
+    let live = true;
+    (async () => {
+      const { data: docs } = await supabase.rpc("fin_doc_lookup", { p_code: code });
+      const ids = ((docs as unknown as { voucher_id: string }[]) || []).map((d) => d.voucher_id);
+      if (!ids.length) { if (live) setDocMatches(new Set()); return; }
+      const { data: allocs } = await supabase
+        .from("fin_payment_allocations")
+        .select("payment_id")
+        .in("voucher_id", ids);
+      if (live) {
+        setDocMatches(new Set(((allocs as { payment_id: string }[]) || []).map((x) => x.payment_id)));
+      }
+    })();
+    return () => { live = false; };
+  }, [search]);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -200,6 +222,7 @@ export default function FinancePaymentsPage() {
       .order("voucher_date", { ascending: true });
 
     const list = ((rest as Ageing[]) || []).length ? (rest as Ageing[]) : hits;
+    if (hit.doc_no) setReference(hit.doc_no);
     setPartyId(hit.party_id ?? "");
     setPartyName(hit.party_name ?? "");
     setAllocs(
@@ -301,11 +324,12 @@ export default function FinancePaymentsPage() {
     if (!q) return rows;
     return rows.filter(
       (r) =>
+        docMatches.has(r.id) ||
         (r.party_name || "").toLowerCase().includes(q) ||
         r.payment_no.toLowerCase().includes(q) ||
         (r.reference || "").toLowerCase().includes(q)
     );
-  }, [rows, search]);
+  }, [rows, search, docMatches]);
 
   const totalIn = visible.filter((r) => r.direction === "in").reduce((s, r) => s + Number(r.amount), 0);
   const totalOut = visible.filter((r) => r.direction === "out").reduce((s, r) => s + Number(r.amount), 0);
