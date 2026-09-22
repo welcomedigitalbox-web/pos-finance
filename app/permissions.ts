@@ -75,10 +75,17 @@ export const ALL_FINANCE_KEYS: PageKey[] = PAGE_OPTIONS.map((p) => p.key);
 // grants; a viewer gets the same pages but the database refuses their writes.
 const FULL_ACCESS_ROLES: string[] = ["fin_admin", "fin_manager"];
 
+const ROLE_PAGES = new Set<string>();
+export function applyRolePages(keys: string[]) {
+  ROLE_PAGES.clear();
+  for (const k of keys) ROLE_PAGES.add(k);
+}
+
 export function hasPermission(profile: FinanceUserLike | null, key: PageKey): boolean {
   if (!profile) return false;
   if (key === "fin-users") return profile.role === "fin_admin";
   if (FULL_ACCESS_ROLES.includes(profile.role)) return true;
+  if (ROLE_PAGES.has(key)) return true;
   return profile.permissions?.includes(key) ?? false;
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { applyRolePages } from "@/app/permissions";
 import { supabase } from "@/lib/supabase";
 import { usePathname } from "next/navigation";
 import { APP_URL } from "@/lib/apps";
@@ -84,6 +85,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .select("store_id")
       .eq("user_id", userId);
 
+    const { data: rp } = await supabase.rpc("my_pages", { p_app: "finance" });
+    applyRolePages(((rp as string[]) || []).map(String));
     setProfile(user);
     setStores(((scope as { store_id: string }[]) || []).map((r) => r.store_id));
     setNotFinance(false);
