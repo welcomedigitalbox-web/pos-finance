@@ -58,6 +58,26 @@ type ReceiptPayment = {
 // than typed as one shape that neither side actually has.
 type Detail = Record<string, unknown> | null;
 
+type SaleItemRow = {
+  product_id: string;
+  variant_id: string | null;
+  product_name: string;
+  qty: number;
+  unit_price: number;
+};
+
+type GoodsBack = "good" | "damaged" | "not_returned";
+
+type CorrectLine = {
+  product_id: string;
+  variant_id: string | null;
+  product_name: string;
+  sold_qty: number;
+  unit_price: number;
+  qty: string;
+  goods_back: GoodsBack;
+};
+
 type Receipt = SaleRow & { lines: ReceiptLine[] | null; detail: Detail };
 
 const SALE_TYPES: SaleType[] = ["walk_in", "wholesale", "online_retail", "online_wholesale"];
@@ -124,6 +144,14 @@ export default function FinanceSalesPage() {
   const [receiptLoading, setReceiptLoading] = useState(false);
   const [slipPhoto, setSlipPhoto] = useState<string | null>(null);
   const [repFilter, setRepFilter] = useState("");
+
+  // Correcting an invoice is not editing it. The original stands; a correction
+  // is raised against it, and one server call moves the stock, files any
+  // write-off and raises the credit note together.
+  const [correctRow, setCorrectRow] = useState<SaleRow | null>(null);
+  const [correctLines, setCorrectLines] = useState<CorrectLine[]>([]);
+  const [correctReason, setCorrectReason] = useState("");
+  const [correcting, setCorrecting] = useState(false);
 
   useEffect(() => {
     if (profile && !hasPermission(profile, "fin-sales")) router.replace("/");
@@ -230,6 +258,66 @@ export default function FinanceSalesPage() {
       showToast("❌ " + errorText(err));
     } finally {
       setReceiptLoading(false);
+    }
+  }
+
+  async function openCorrection(r: SaleRow) {
+    if (r.source !== "pos") return showToast(t("fin_correctPosOnly"));
+    setCorrectReason("");
+    setCorrecting(true);
+    try {
+      const { data, error } = await supabase
+        .from("sale_items")
+        .select("product_id, variant_id, product_name, qty, unit_price")
+        .eq("sale_id", r.source_id);
+      if (error) throw error;
+      setCorrectLines(((data as SaleItemRow[]) || []).map((i) => ({
+        product_id: i.product_id,
+        variant_id: i.variant_id,
+        product_name: i.product_name,
+        sold_qty: Number(i.qty),
+        unit_price: Number(i.unit_price),
+        qty: "",
+        goods_back: "not_returned" as GoodsBack,
+      })));
+      setCorrectRow(r);
+    } catch (err) {
+      showToast("\u274c " + errorText(err));
+    } finally {
+      setCorrecting(false);
+    }
+  }
+
+  async function submitCorrection() {
+    if (!correctRow) return;
+    const lines = correctLines
+      .filter((l) => Number(l.qty) > 0)
+      .map((l) => ({
+        product_id: l.product_id,
+        variant_id: l.variant_id,
+        qty: Number(l.qty),
+        goods_back: l.goods_back,
+      }));
+    if (!lines.length) return showToast(t("fin_correctNeedQty"));
+    if (!correctReason.trim()) return showToast(t("fin_correctNeedReason"));
+
+    setCorrecting(true);
+    try {
+      const { error } = await supabase.rpc("apply_sale_correction", {
+        p_sale_id: correctRow.source_id,
+        p_lines: lines,
+        p_reason: correctReason.trim(),
+        p_refund_method: "cash",
+        p_refund_payment: correctRow.payment_method,
+      });
+      if (error) throw error;
+      showToast(t("fin_correctDone"));
+      setCorrectRow(null);
+      await load();
+    } catch (err) {
+      showToast("\u274c " + errorText(err));
+    } finally {
+      setCorrecting(false);
     }
   }
 
@@ -453,6 +541,15 @@ export default function FinanceSalesPage() {
                   >
                     {t("fin_viewReceipt")}
                   </button>
+                  {r.source === "pos" && (
+                    <button
+                      onClick={() => openCorrection(r)}
+                      disabled={correcting}
+                      className="text-orange-600 text-xs font-medium disabled:text-slate-300 ml-3"
+                    >
+                      {t("fin_correct")}
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -462,6 +559,96 @@ export default function FinanceSalesPage() {
           </tbody>
         </table>
       </div>
+
+      {correctRow && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-2xl shadow-lg max-h-[90vh] overflow-y-auto">
+            <h3 className="font-semibold text-lg">{t("fin_correctTitle")}</h3>
+            <p className="text-sm text-slate-500 mt-1">
+              {correctRow.reference} · {storeName(correctRow.store_id)} · {fmtMMK(correctRow.total)}
+            </p>
+            <p className="text-sm text-slate-500 mt-2">{t("fin_correctIntro")}</p>
+
+            <table className="w-full text-sm mt-4">
+              <thead className="text-slate-500 text-left border-b border-slate-200">
+                <tr>
+                  <th className="py-2">{t("fin_description")}</th>
+                  <th className="py-2 text-right">{t("fin_qty")}</th>
+                  <th className="py-2 text-right">{t("fin_correctQty")}</th>
+                  <th className="py-2">{t("fin_correctGoodsBack")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {correctLines.map((l, i) => (
+                  <tr key={`${l.product_id}:${l.variant_id || "base"}`} className="border-b border-slate-100 last:border-0">
+                    <td className="py-2">{l.product_name}</td>
+                    <td className="py-2 text-right text-slate-500">{fmtNum(l.sold_qty)}</td>
+                    <td className="py-2 text-right">
+                      <input
+                        type="number" min={0} max={l.sold_qty}
+                        className="border border-slate-200 rounded-lg px-2 py-1 w-20 text-right"
+                        value={l.qty}
+                        onChange={(e) => {
+                          const next = [...correctLines];
+                          next[i] = { ...l, qty: e.target.value };
+                          setCorrectLines(next);
+                        }}
+                      />
+                    </td>
+                    <td className="py-2">
+                      <select
+                        className="border border-slate-200 rounded-lg px-2 py-1 text-sm"
+                        value={l.goods_back}
+                        onChange={(e) => {
+                          const next = [...correctLines];
+                          next[i] = { ...l, goods_back: e.target.value as GoodsBack };
+                          setCorrectLines(next);
+                        }}
+                      >
+                        <option value="not_returned">{t("fin_goodsNone")}</option>
+                        <option value="good">{t("fin_goodsGood")}</option>
+                        <option value="damaged">{t("fin_goodsDamaged")}</option>
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <label className="text-sm text-slate-600 mt-4 block">{t("fin_correctReason")}</label>
+            <textarea
+              rows={2}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1"
+              value={correctReason}
+              onChange={(e) => setCorrectReason(e.target.value)}
+            />
+
+            <div className="flex justify-between items-center mt-4 pt-3 border-t border-slate-200">
+              <div className="text-sm">
+                <span className="text-slate-500">{t("fin_correctRefund")}: </span>
+                <span className="font-semibold">
+                  {fmtMMK(correctLines.reduce((sum, l) => sum + (Number(l.qty) || 0) * l.unit_price, 0))}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setCorrectRow(null)}
+                  className="px-4 py-2 border border-slate-200 rounded-lg text-sm"
+                >
+                  {t("fin_cancel")}
+                </button>
+                <button
+                  onClick={submitCorrection}
+                  disabled={correcting}
+                  className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium disabled:bg-slate-300"
+                >
+                  {t("fin_correctSubmit")}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {receipt && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4 print:static print:bg-transparent print:p-0 print:block">
