@@ -68,6 +68,7 @@ export default function JournalPage() {
   const [pairOf, setPairOf] = useState<Record<string, string>>({});
   // journals the shop owns: corrected in the POS, never reversed in finance
   const [posSourced, setPosSourced] = useState<Set<string>>(new Set());
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -230,6 +231,31 @@ export default function JournalPage() {
 
   const journalDebit = (id: string) =>
     (linesByJournal.get(id) || []).reduce((s, l) => s + Number(l.debit || 0), 0);
+
+  // Pivot-style grouping: one collapsible block per journal type.
+  const grouped = useMemo(() => {
+    const order: string[] = [];
+    const byType = new Map<string, FinJournal[]>();
+    for (const j of visibleJournals) {
+      const k = j.journal_type || "-";
+      if (!byType.has(k)) {
+        byType.set(k, []);
+        order.push(k);
+      }
+      byType.get(k)!.push(j);
+    }
+    return order.map((type) => {
+      const rows = byType.get(type) || [];
+      let total = 0;
+      for (const r of rows) {
+        total += journalDebit(r.id);
+        const pair = receiptFor.get(r.id);
+        if (pair) total += journalDebit(pair.id);
+      }
+      return { type, rows, total };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleJournals, linesByJournal, receiptFor]);
 
   const formDebit = formLines.reduce((s, l) => s + Number(l.debit || 0), 0);
   const formCredit = formLines.reduce((s, l) => s + Number(l.credit || 0), 0);
@@ -467,31 +493,66 @@ export default function JournalPage() {
           value={to}
           onChange={(e) => setTo(e.target.value)}
         />
-        <select
-          className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
-          value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value)}
-        >
-          <option value="">{t("fin_all")}</option>
-          {JOURNAL_TYPES.map((k) => (
-            <option key={k} value={k}>
-              {k}
-            </option>
-          ))}
-        </select>
-        <select
-          className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
-          value={storeFilter}
-          onChange={(e) => setStoreFilter(e.target.value)}
-        >
-          <option value="">{t("fin_all")}</option>
-          {stores.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
+        <label className="flex items-center gap-1 text-xs text-slate-500">
+          {t("fin_kind")}
+          <select
+            className="border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900"
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+          >
+            <option value="">{t("fin_all")}</option>
+            {JOURNAL_TYPES.map((k) => (
+              <option key={k} value={k}>
+                {k}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-1 text-xs text-slate-500">
+          {t("fin_store")}
+          <select
+            className="border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900"
+            value={storeFilter}
+            onChange={(e) => setStoreFilter(e.target.value)}
+          >
+            <option value="">{t("fin_all")}</option>
+            {stores.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
+
+      {/* Quick type filter: the same choice as the dropdown, one click away. */}
+      {!loading && (
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          <button
+            onClick={() => setTypeFilter("")}
+            className={`px-2.5 py-1 rounded-full text-xs font-medium border ${
+              typeFilter === ""
+                ? "bg-slate-900 text-white border-slate-900"
+                : "bg-white text-slate-600 border-slate-200"
+            }`}
+          >
+            {t("fin_all")}
+          </button>
+          {grouped.map((g) => (
+            <button
+              key={g.type}
+              onClick={() => setTypeFilter(typeFilter === g.type ? "" : g.type)}
+              className={`px-2.5 py-1 rounded-full text-xs font-medium border ${
+                typeFilter === g.type
+                  ? "bg-slate-900 text-white border-slate-900"
+                  : "bg-white text-slate-600 border-slate-200"
+              }`}
+            >
+              {g.type} · {g.rows.length}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto">
         <table className="w-full text-sm min-w-[940px]">
@@ -516,7 +577,35 @@ export default function JournalPage() {
               </tr>
             )}
             {!loading &&
-              visibleJournals.map((j) => {
+              grouped.map((g) => (
+                <Fragment key={`g-${g.type}`}>
+                  <tr
+                    className="border-t border-slate-200 bg-slate-50 cursor-pointer"
+                    onClick={() =>
+                      setCollapsed((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(g.type)) next.delete(g.type);
+                        else next.add(g.type);
+                        return next;
+                      })
+                    }
+                  >
+                    <td colSpan={5} className="px-3 py-2 font-medium text-slate-700">
+                      <span className="inline-block w-4 text-slate-400">
+                        {collapsed.has(g.type) ? "▸" : "▾"}
+                      </span>
+                      {g.type}
+                      <span className="ml-2 text-xs font-normal text-slate-400">
+                        {g.rows.length}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-right font-semibold text-slate-700">
+                      {fmtNum(g.total)}
+                    </td>
+                    <td colSpan={2} />
+                  </tr>
+                  {!collapsed.has(g.type) &&
+                    g.rows.map((j) => {
                 const pair = receiptFor.get(j.id) || null;
                 return (
                 <Fragment key={j.id}>
@@ -612,6 +701,8 @@ export default function JournalPage() {
                 </Fragment>
                 );
               })}
+                </Fragment>
+              ))}
             {!loading && visibleJournals.length === 0 && (
               <tr>
                 <td colSpan={8} className="text-center text-slate-400 py-8">
