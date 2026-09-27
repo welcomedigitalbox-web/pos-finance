@@ -68,7 +68,6 @@ export default function JournalPage() {
   const [pairOf, setPairOf] = useState<Record<string, string>>({});
   // journals the shop owns: corrected in the POS, never reversed in finance
   const [posSourced, setPosSourced] = useState<Set<string>>(new Set());
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -584,35 +583,7 @@ export default function JournalPage() {
               </tr>
             )}
             {!loading &&
-              grouped.map((g) => (
-                <Fragment key={`g-${g.type}`}>
-                  <tr
-                    className="border-t border-slate-200 bg-slate-50 cursor-pointer"
-                    onClick={() =>
-                      setCollapsed((prev) => {
-                        const next = new Set(prev);
-                        if (next.has(g.type)) next.delete(g.type);
-                        else next.add(g.type);
-                        return next;
-                      })
-                    }
-                  >
-                    <td colSpan={5} className="px-3 py-2 font-medium text-slate-700">
-                      <span className="inline-block w-4 text-slate-400">
-                        {collapsed.has(g.type) ? "▸" : "▾"}
-                      </span>
-                      {typeLabel(g.type)}
-                      <span className="ml-2 text-xs font-normal text-slate-400">
-                        {g.rows.length}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-right font-semibold text-slate-700">
-                      {fmtNum(g.total)}
-                    </td>
-                    <td colSpan={2} />
-                  </tr>
-                  {!collapsed.has(g.type) &&
-                    g.rows.map((j) => {
+              visibleJournals.map((j) => {
                 const pair = receiptFor.get(j.id) || null;
                 return (
                 <Fragment key={j.id}>
@@ -629,8 +600,10 @@ export default function JournalPage() {
                       )}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">{j.journal_date}</td>
-                    <td className="px-3 py-2 text-slate-500">
-                      {typeLabel(j.journal_type)}
+                    <td className="px-3 py-2">
+                      <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-xs font-medium">
+                        {typeLabel(j.journal_type)}
+                      </span>
                       {pair && (
                         <span className="ml-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-medium">
                           + {typeLabel(pair.journal_type)}
@@ -708,8 +681,6 @@ export default function JournalPage() {
                 </Fragment>
                 );
               })}
-                </Fragment>
-              ))}
             {!loading && visibleJournals.length === 0 && (
               <tr>
                 <td colSpan={8} className="text-center text-slate-400 py-8">
