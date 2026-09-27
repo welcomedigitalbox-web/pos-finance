@@ -64,7 +64,6 @@ export default function CreditNotesPage() {
 
   const [rows, setRows] = useState<CreditNote[]>([]);
   const [lines, setLines] = useState<Line[]>([]);
-  const [journals, setJournals] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
 
@@ -115,25 +114,15 @@ export default function CreditNotesPage() {
 
     setRows(list);
 
+    // The journal number is CRN- plus the credit note number, so it is not
+    // worth a second query or a column of its own.
     const ids = list.map((r) => r.id);
     if (ids.length) {
-      const [{ data: li }, { data: js }] = await Promise.all([
-        supabase.from("sale_return_items").select("*").in("return_id", ids),
-        supabase
-          .from("fin_journals")
-          .select("journal_no, source_id")
-          .eq("source_type", "sale_return")
-          .in("source_id", ids),
-      ]);
+      const { data: li } = await supabase
+        .from("sale_return_items").select("*").in("return_id", ids);
       setLines((li as Line[]) || []);
-      const map: Record<string, string> = {};
-      for (const j of (js as { journal_no: string; source_id: string }[]) || []) {
-        map[j.source_id] = j.journal_no;
-      }
-      setJournals(map);
     } else {
       setLines([]);
-      setJournals({});
     }
 
     setLoading(false);
@@ -141,7 +130,9 @@ export default function CreditNotesPage() {
 
   const visible = search.trim()
     ? rows.filter((r) => {
-        const q = search.trim().toLowerCase();
+        // A journal number is only the credit note number with CRN- in front
+        // of it, so someone pasting one should still find the row.
+        const q = search.trim().toLowerCase().replace(/^crn-/, "");
         return (
           (r.return_number || "").toLowerCase().includes(q) ||
           (r.sale_ref || "").toLowerCase().includes(q) ||
@@ -240,7 +231,6 @@ export default function CreditNotesPage() {
               <th className="text-left px-3 py-2">Invoice</th>
               <th className="text-left px-3 py-2">Customer</th>
               <th className="text-left px-3 py-2">Raised by</th>
-              <th className="text-left px-3 py-2">Journal</th>
               <th className="text-right px-3 py-2">Refund</th>
             </tr>
           </thead>
@@ -311,10 +301,9 @@ export default function CreditNotesPage() {
                       {r.customer_name || "Walk-in"}
                     </td>
                     <td className="px-3 py-2 text-slate-500 text-xs">
-                      {r.corrected_by || r.approved_by || r.requested_by || "-"}
-                    </td>
-                    <td className="px-3 py-2 text-slate-400 text-xs">
-                      {journals[r.id] || "—"}
+                      {r.is_correction
+                        ? r.corrected_by || r.requested_by || "-"
+                        : r.requested_by || "-"}
                     </td>
                     <td className="px-3 py-2 text-right font-medium text-red-600">
                       {fmtMMK(r.refund_amount)}
@@ -323,7 +312,7 @@ export default function CreditNotesPage() {
 
                   {open && (
                     <tr className="bg-slate-50">
-                      <td colSpan={7} className="px-4 py-3">
+                      <td colSpan={6} className="px-4 py-3">
                         <table className="w-full text-sm">
                           <thead className="text-slate-400">
                             <tr>
@@ -377,14 +366,14 @@ export default function CreditNotesPage() {
 
             {!loading && visible.length === 0 && (
               <tr>
-                <td colSpan={7} className="text-center text-slate-400 py-12">
+                <td colSpan={6} className="text-center text-slate-400 py-12">
                   No credit notes in this period
                 </td>
               </tr>
             )}
             {loading && (
               <tr>
-                <td colSpan={7} className="text-center text-slate-400 py-12">
+                <td colSpan={6} className="text-center text-slate-400 py-12">
                   …
                 </td>
               </tr>
