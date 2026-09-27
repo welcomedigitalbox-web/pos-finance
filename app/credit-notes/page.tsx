@@ -150,6 +150,15 @@ export default function CreditNotesPage() {
       })
     : rows;
 
+  // What became of the goods, as one badge per distinct answer on the note.
+  function goodsOf(returnId: string): string[] {
+    const set = new Set<string>();
+    for (const l of lines) {
+      if (l.return_id === returnId && l.condition) set.add(l.condition);
+    }
+    return [...set];
+  }
+
   const totalRefund = visible.reduce((s, r) => s + Number(r.refund_amount || 0), 0);
   const correctionCount = visible.filter((r) => r.is_correction).length;
 
@@ -252,12 +261,32 @@ export default function CreditNotesPage() {
                       })}
                     </td>
                     <td className="px-3 py-2">
-                      <span className="font-medium">{r.return_number || "-"}</span>
-                      {r.is_correction && (
-                        <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] bg-orange-100 text-orange-700">
-                          correction
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-medium">{r.return_number || "-"}</span>
+                        {/* Two prefixes on one screen read as a muddle, so the
+                            row says in words where it came from. */}
+                        <span
+                          className={
+                            "px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap " +
+                            (r.is_correction
+                              ? "bg-orange-100 text-orange-700"
+                              : "bg-blue-100 text-blue-700")
+                          }
+                        >
+                          {r.is_correction ? "Finance correction" : "Shop return"}
                         </span>
-                      )}
+                        {goodsOf(r.id).map((c) => (
+                          <span
+                            key={c}
+                            className={
+                              "px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap " +
+                              (CONDITION_TONE[c] || "bg-slate-100 text-slate-600")
+                            }
+                          >
+                            {CONDITION_LABEL[c] || c}
+                          </span>
+                        ))}
+                      </div>
                     </td>
                     <td className="px-3 py-2 text-slate-500">{r.sale_ref || "-"}</td>
                     <td className="px-3 py-2 text-slate-500">
