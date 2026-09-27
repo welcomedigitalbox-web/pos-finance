@@ -287,6 +287,16 @@ export default function CreditNotesPage() {
                           </span>
                         ))}
                       </div>
+                      {/* Money went back for a reason, and the reason is the
+                          first thing anyone checking this row wants to know. */}
+                      {r.reason && (
+                        <div
+                          className="text-xs text-slate-500 mt-1 max-w-[280px] truncate"
+                          title={r.reason}
+                        >
+                          {r.reason}
+                        </div>
+                      )}
                     </td>
                     <td className="px-3 py-2 text-slate-500">{r.sale_ref || "-"}</td>
                     <td className="px-3 py-2 text-slate-500">
