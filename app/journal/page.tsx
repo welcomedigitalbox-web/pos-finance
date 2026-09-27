@@ -64,6 +64,10 @@ export default function JournalPage() {
   const [typeFilter, setTypeFilter] = useState("");
   const [storeFilter, setStoreFilter] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
+  // receipt journal id -> the sale journal it belongs to (display pairing only)
+  const [pairOf, setPairOf] = useState<Record<string, string>>({});
+  // journals the shop owns: corrected in the POS, never reversed in finance
+  const [posSourced, setPosSourced] = useState<Set<string>>(new Set());
 
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -126,6 +130,68 @@ export default function JournalPage() {
     } else {
       setLines([]);
     }
+
+    // A POS cash sale writes two journals (sale + receipt). Pair them so the
+    // list shows one row per sale; the data itself is untouched.
+    const receipts = list.filter(
+      (j) => j.journal_type === "receipt" && j.source_type === "payment" && j.source_id
+    );
+    const saleByVoucher = new Map<string, string>();
+    for (const j of list) {
+      if (j.journal_type === "sale" && j.source_type === "voucher" && j.source_id) {
+        saleByVoucher.set(j.source_id, j.id);
+      }
+    }
+    const map: Record<string, string> = {};
+    if (receipts.length > 0 && saleByVoucher.size > 0) {
+      // fin_payment_allocations links the receipt's payment to the voucher the
+      // sale journal was posted from.
+      const { data: allocs } = await supabase
+        .from("fin_payment_allocations")
+        .select("payment_id, voucher_id")
+        .in("payment_id", receipts.map((r) => r.source_id as string));
+      const voucherOf = new Map<string, string | null>();
+      for (const a of (allocs as { payment_id: string; voucher_id: string }[]) || []) {
+        if (!a.payment_id || !a.voucher_id) continue;
+        // A payment spread over several vouchers is left as its own row.
+        voucherOf.set(a.payment_id, voucherOf.has(a.payment_id) ? null : a.voucher_id);
+      }
+      for (const r of receipts) {
+        const v = voucherOf.get(String(r.source_id));
+        const saleId = v ? saleByVoucher.get(v) : undefined;
+        // Only fold a receipt that settles exactly one sale journal.
+        if (saleId) map[r.id] = saleId;
+      }
+    }
+    setPairOf(map);
+
+    // Mirror the server's reverse guard so the button is not offered at all.
+    const shopOwned = new Set<string>();
+    for (const j of list) if (j.source_type === "sale_return") shopOwned.add(j.id);
+    const voucherIds = Array.from(
+      new Set(list.filter((j) => j.source_type === "voucher" && j.source_id).map((j) => j.source_id as string))
+    );
+    if (voucherIds.length > 0) {
+      const { data: vs } = await supabase
+        .from("fin_vouchers")
+        .select("id, source_type")
+        .in("id", voucherIds);
+      const posVouchers = new Set(
+        ((vs as { id: string; source_type: string | null }[]) || [])
+          .filter((v) => v.source_type === "pos_sale")
+          .map((v) => v.id)
+      );
+      for (const j of list) {
+        if (j.source_type === "voucher" && j.source_id && posVouchers.has(j.source_id)) {
+          shopOwned.add(j.id);
+        }
+      }
+    }
+    // A paired receipt belongs to the same POS sale.
+    for (const [receiptId, saleId] of Object.entries(map)) {
+      if (shopOwned.has(saleId)) shopOwned.add(receiptId);
+    }
+    setPosSourced(shopOwned);
     setLoading(false);
   }
 
@@ -146,6 +212,21 @@ export default function JournalPage() {
     }
     return m;
   }, [lines]);
+
+  // sale journal id -> its paired receipt journal
+  const receiptFor = useMemo(() => {
+    const m = new Map<string, FinJournal>();
+    for (const j of journals) {
+      const saleId = pairOf[j.id];
+      if (saleId) m.set(saleId, j);
+    }
+    return m;
+  }, [journals, pairOf]);
+
+  const visibleJournals = useMemo(
+    () => journals.filter((j) => !pairOf[j.id]),
+    [journals, pairOf]
+  );
 
   const journalDebit = (id: string) =>
     (linesByJournal.get(id) || []).reduce((s, l) => s + Number(l.debit || 0), 0);
@@ -435,15 +516,31 @@ export default function JournalPage() {
               </tr>
             )}
             {!loading &&
-              journals.map((j) => (
+              visibleJournals.map((j) => {
+                const pair = receiptFor.get(j.id) || null;
+                return (
                 <Fragment key={j.id}>
                   <tr
                     className="border-t border-slate-100 cursor-pointer hover:bg-slate-50"
                     onClick={() => setExpanded(expanded === j.id ? null : j.id)}
                   >
-                    <td className="px-3 py-2 font-mono text-xs">{j.journal_no}</td>
+                    <td className="px-3 py-2 font-mono text-xs">
+                      {j.journal_no}
+                      {pair && (
+                        <div className="font-sans text-[10px] text-slate-400">
+                          + {pair.journal_no}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-3 py-2 whitespace-nowrap">{j.journal_date}</td>
-                    <td className="px-3 py-2 text-slate-500">{j.journal_type}</td>
+                    <td className="px-3 py-2 text-slate-500">
+                      {j.journal_type}
+                      {pair && (
+                        <span className="ml-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-medium">
+                          + {pair.journal_type}
+                        </span>
+                      )}
+                    </td>
                     <td className="px-3 py-2">{storeName(j.store_id)}</td>
                     <td className="px-3 py-2">{j.memo || "-"}</td>
                     <td className="px-3 py-2 text-right font-medium">{fmtNum(journalDebit(j.id))}</td>
@@ -456,7 +553,7 @@ export default function JournalPage() {
                       <div className="text-[10px] text-slate-400 mt-0.5">{j.created_by || ""}</div>
                     </td>
                     <td className="px-3 py-2 text-right">
-                      {j.is_posted && !j.is_reversed && (
+                      {j.is_posted && !j.is_reversed && !posSourced.has(j.id) && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -483,12 +580,21 @@ export default function JournalPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {(linesByJournal.get(j.id) || []).map((l) => {
+                            {(pair
+                              ? [...(linesByJournal.get(j.id) || []), ...(linesByJournal.get(pair.id) || [])]
+                              : linesByJournal.get(j.id) || []
+                            ).map((l) => {
                               const a = accountById.get(l.account_id);
+                              const fromPair = !!pair && l.journal_id === pair.id;
                               return (
                                 <tr key={l.id} className="border-t border-slate-200/70">
                                   <td className="px-2 py-1">
                                     {a ? `${a.code} · ${accName(a)}` : l.account_id}
+                                    {fromPair && (
+                                      <span className="ml-1 text-[10px] text-emerald-700">
+                                        {pair?.journal_no}
+                                      </span>
+                                    )}
                                   </td>
                                   <td className="px-2 py-1 text-right">{fmtNum(l.debit)}</td>
                                   <td className="px-2 py-1 text-right">{fmtNum(l.credit)}</td>
@@ -504,8 +610,9 @@ export default function JournalPage() {
                     </tr>
                   )}
                 </Fragment>
-              ))}
-            {!loading && journals.length === 0 && (
+                );
+              })}
+            {!loading && visibleJournals.length === 0 && (
               <tr>
                 <td colSpan={8} className="text-center text-slate-400 py-8">
                   {t("fin_empty")}
