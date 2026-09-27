@@ -649,30 +649,39 @@ export default function JournalPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {(pair
-                              ? [...(linesByJournal.get(j.id) || []), ...(linesByJournal.get(pair.id) || [])]
-                              : linesByJournal.get(j.id) || []
-                            ).map((l) => {
-                              const a = accountById.get(l.account_id);
-                              const fromPair = !!pair && l.journal_id === pair.id;
-                              return (
-                                <tr key={l.id} className="border-t border-slate-200/70">
-                                  <td className="px-2 py-1">
-                                    {a ? `${a.code} · ${accName(a)}` : l.account_id}
-                                    {fromPair && (
-                                      <span className="ml-1 text-[10px] text-emerald-700">
-                                        {pair?.journal_no}
+                            {/* One block per journal, so a folded sale still
+                                shows its Sale and Receipt sides apart. */}
+                            {(pair ? [j, pair] : [j]).map((src) => (
+                              <Fragment key={src.id}>
+                                {pair && (
+                                  <tr className="border-t border-slate-200/70">
+                                    <td colSpan={4} className="px-2 pt-3 pb-1">
+                                      <span className="px-1.5 py-0.5 rounded bg-slate-200/70 text-slate-600 text-xs font-medium">
+                                        {typeLabel(src.journal_type)}
                                       </span>
-                                    )}
-                                  </td>
-                                  <td className="px-2 py-1 text-right">{fmtNum(l.debit)}</td>
-                                  <td className="px-2 py-1 text-right">{fmtNum(l.credit)}</td>
-                                  <td className="px-2 py-1 text-slate-500">
-                                    {l.memo || l.party_name || "-"}
-                                  </td>
-                                </tr>
-                              );
-                            })}
+                                      <span className="ml-2 font-mono text-[10px] text-slate-400">
+                                        {src.journal_no}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                )}
+                                {(linesByJournal.get(src.id) || []).map((l) => {
+                                  const a = accountById.get(l.account_id);
+                                  return (
+                                    <tr key={l.id} className="border-t border-slate-200/70">
+                                      <td className="px-2 py-1">
+                                        {a ? `${a.code} · ${accName(a)}` : l.account_id}
+                                      </td>
+                                      <td className="px-2 py-1 text-right">{fmtNum(l.debit)}</td>
+                                      <td className="px-2 py-1 text-right">{fmtNum(l.credit)}</td>
+                                      <td className="px-2 py-1 text-slate-500">
+                                        {l.memo || l.party_name || "-"}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </Fragment>
+                            ))}
                           </tbody>
                         </table>
                       </td>
