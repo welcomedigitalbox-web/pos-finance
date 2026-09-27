@@ -21,7 +21,7 @@ import type { TranslationKey } from "@/app/i18n";
 const ACCOUNT_TYPES: AccountType[] = ["asset", "liability", "equity", "income", "expense"];
 
 const JOURNAL_TYPES = [
-  "sale", "purchase", "receipt", "payment", "cashbook",
+  "sale", "purchase", "receipt", "payment", "return", "cashbook",
   "bank", "journal", "opening", "contra",
 ];
 
@@ -202,6 +202,13 @@ export default function JournalPage() {
     for (const a of accounts) m.set(a.id, a);
     return m;
   }, [accounts]);
+  // Journal types are stored as English keys; show the reader's language.
+  const typeLabel = (k: string | null) => {
+    if (!k) return "-";
+    const key = `fin_kind_${k}` as TranslationKey;
+    const label = t(key);
+    return label === key ? k : label;
+  };
   const storeName = (id: string | null) => (id ? stores.find((s) => s.id === id)?.name || id : "-");
 
   const linesByJournal = useMemo(() => {
@@ -503,7 +510,7 @@ export default function JournalPage() {
             <option value="">{t("fin_all")}</option>
             {JOURNAL_TYPES.map((k) => (
               <option key={k} value={k}>
-                {k}
+                {typeLabel(k)}
               </option>
             ))}
           </select>
@@ -548,7 +555,7 @@ export default function JournalPage() {
                   : "bg-white text-slate-600 border-slate-200"
               }`}
             >
-              {g.type} · {g.rows.length}
+              {typeLabel(g.type)} · {g.rows.length}
             </button>
           ))}
         </div>
@@ -594,7 +601,7 @@ export default function JournalPage() {
                       <span className="inline-block w-4 text-slate-400">
                         {collapsed.has(g.type) ? "▸" : "▾"}
                       </span>
-                      {g.type}
+                      {typeLabel(g.type)}
                       <span className="ml-2 text-xs font-normal text-slate-400">
                         {g.rows.length}
                       </span>
@@ -623,10 +630,10 @@ export default function JournalPage() {
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">{j.journal_date}</td>
                     <td className="px-3 py-2 text-slate-500">
-                      {j.journal_type}
+                      {typeLabel(j.journal_type)}
                       {pair && (
                         <span className="ml-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-medium">
-                          + {pair.journal_type}
+                          + {typeLabel(pair.journal_type)}
                         </span>
                       )}
                     </td>
