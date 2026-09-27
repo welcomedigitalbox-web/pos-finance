@@ -254,10 +254,19 @@ export default function CreditNotesPage() {
                     onClick={() => setExpanded(open ? null : r.id)}
                     className="border-t border-slate-100 cursor-pointer hover:bg-slate-50"
                   >
-                    <td className="px-3 py-2 whitespace-nowrap">
+                    <td className="px-3 py-2 whitespace-nowrap align-top">
+                      {/* Yangon time, so a refund taken late in the evening
+                          reads as the hour the shop was open. */}
                       {new Date(r.created_at).toLocaleDateString("en-CA", {
                         timeZone: "Asia/Yangon",
                       })}
+                      <div className="text-xs text-slate-400">
+                        {new Date(r.created_at).toLocaleTimeString("en-GB", {
+                          timeZone: "Asia/Yangon",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </div>
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex flex-wrap items-center gap-1.5">
@@ -315,12 +324,6 @@ export default function CreditNotesPage() {
                   {open && (
                     <tr className="bg-slate-50">
                       <td colSpan={7} className="px-4 py-3">
-                        {r.reason && (
-                          <p className="text-sm text-slate-600 mb-3">
-                            <span className="text-slate-400">Reason: </span>
-                            {r.reason}
-                          </p>
-                        )}
                         <table className="w-full text-sm">
                           <thead className="text-slate-400">
                             <tr>
@@ -364,7 +367,6 @@ export default function CreditNotesPage() {
                         </table>
                         <p className="text-xs text-slate-400 mt-3">
                           Refunded by {r.refund_payment_method || r.refund_method || "—"}
-                          {r.original_sale_id && ` · sale ${r.original_sale_id.slice(0, 8)}`}
                         </p>
                       </td>
                     </tr>
