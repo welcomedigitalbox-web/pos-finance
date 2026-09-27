@@ -19,6 +19,7 @@ export type PageKey =
   | "fin-cashbook"
   | "fin-bank"
   | "fin-journal"
+  | "fin-credit-notes"
   | "fin-ledger"
   | "fin-trial-balance"
   | "fin-accounts"
@@ -50,6 +51,7 @@ export const PAGE_OPTIONS: { key: PageKey; href: string; labelKey: string; group
   { key: "fin-cashbook", href: "/cashbook", labelKey: "nav_finCashbook", group: "books" },
   { key: "fin-bank", href: "/bank", labelKey: "nav_finBank", group: "books" },
   { key: "fin-journal", href: "/journal", labelKey: "nav_finJournal", group: "books" },
+  { key: "fin-credit-notes", href: "/credit-notes", labelKey: "nav_finCreditNotes", group: "books" },
   { key: "fin-ledger", href: "/general-ledger", labelKey: "nav_finLedger", group: "books" },
   { key: "fin-trial-balance", href: "/trial-balance", labelKey: "nav_finTrialBalance", group: "books" },
   { key: "fin-accounts", href: "/accounts", labelKey: "nav_finAccounts", group: "setup" },
