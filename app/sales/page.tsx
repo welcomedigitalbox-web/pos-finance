@@ -127,6 +127,8 @@ export default function FinanceSalesPage() {
   const router = useRouter();
 
   const [rows, setRows] = useState<SaleRow[]>([]);
+  // How much of each invoice has been given back, by sale id.
+  const [refunds, setRefunds] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState("");
 
@@ -179,13 +181,40 @@ export default function FinanceSalesPage() {
       if (sourceFilter) q = q.eq("source", sourceFilter);
       const { data, error } = await q;
       if (error) throw error;
-      setRows((data as SaleRow[]) || []);
+      const list = (data as SaleRow[]) || [];
+      setRows(list);
+      await loadRefunds(list);
     } catch (err) {
       showToast("❌ " + errorText(err));
       setRows([]);
+      setRefunds({});
     } finally {
       setLoading(false);
     }
+  }
+
+  // An invoice that has been refunded is not worth what it says at the top.
+  // Every other screen already nets these off; this one used to show the
+  // gross figure and quietly disagree with the profit and loss.
+  async function loadRefunds(list: SaleRow[]) {
+    const ids = list.filter((r) => r.source === "pos").map((r) => r.source_id);
+    if (!ids.length) {
+      setRefunds({});
+      return;
+    }
+    const map: Record<string, number> = {};
+    // Asked for in batches: a few hundred ids do not fit in one query string.
+    for (let i = 0; i < ids.length; i += 100) {
+      const { data } = await supabase
+        .from("sale_returns")
+        .select("original_sale_id, refund_amount")
+        .in("original_sale_id", ids.slice(i, i + 100))
+        .in("status", ["approved", "completed", "refunded"]);
+      for (const r of (data as { original_sale_id: string; refund_amount: number }[]) || []) {
+        map[r.original_sale_id] = (map[r.original_sale_id] || 0) + Number(r.refund_amount || 0);
+      }
+    }
+    setRefunds(map);
   }
 
   function showToast(msg: string) {
@@ -234,13 +263,22 @@ export default function FinanceSalesPage() {
     let total = 0;
     let paid = 0;
     let balance = 0;
+    let refunded = 0;
     for (const r of visible) {
       total += Number(r.total || 0);
       paid += Number(r.paid_amount || 0);
       balance += Number(r.balance || 0);
+      refunded += refunds[r.source_id] || 0;
     }
-    return { count: visible.length, total, paid, balance };
-  }, [visible]);
+    return {
+      count: visible.length,
+      total,
+      paid,
+      balance,
+      refunded,
+      net: total - refunded,
+    };
+  }, [visible, refunds]);
 
   const storeName = (id: string | null) => (id ? stores.find((s) => s.id === id)?.name || id : "-");
 
@@ -458,7 +496,13 @@ export default function FinanceSalesPage() {
         </div>
         <div className="bg-white border border-slate-200 rounded-xl p-3">
           <div className="text-xs text-slate-500 uppercase">{t("fin_totalSales")}</div>
-          <div className="text-lg font-bold mt-1">{fmtMMK(totals.total)}</div>
+          {/* Net of what has been given back, so this agrees with the books. */}
+          <div className="text-lg font-bold mt-1">{fmtMMK(totals.net)}</div>
+          {totals.refunded > 0 && (
+            <div className="text-xs text-slate-400 mt-0.5">
+              {fmtMMK(totals.total)} &minus; {fmtMMK(totals.refunded)} refunded
+            </div>
+          )}
         </div>
         <div className="bg-white border border-slate-200 rounded-xl p-3">
           <div className="text-xs text-slate-500 uppercase">{t("fin_collected")}</div>
@@ -528,7 +572,16 @@ export default function FinanceSalesPage() {
                   </span>
                 </td>
                 <td className="px-3 py-2 text-slate-500">{r.delivery_status || "-"}</td>
-                <td className="px-3 py-2 text-right font-medium">{fmtNum(r.total)}</td>
+                <td className="px-3 py-2 text-right font-medium whitespace-nowrap">
+                  {fmtNum(r.total)}
+                  {/* An invoice that was corrected or returned says so here,
+                      rather than looking like a sale that still stands. */}
+                  {(refunds[r.source_id] || 0) > 0 && (
+                    <div className="text-xs font-normal text-red-600">
+                      &minus;{fmtNum(refunds[r.source_id])} refunded
+                    </div>
+                  )}
+                </td>
                 <td className="px-3 py-2 text-right text-slate-500">{fmtNum(r.paid_amount)}</td>
                 <td className={`px-3 py-2 text-right ${Number(r.balance || 0) > 0 ? "text-orange-600 font-semibold" : "text-slate-400"}`}>
                   {fmtNum(r.balance)}
