@@ -238,7 +238,6 @@ export default function CreditNotesPage() {
               <th className="text-left px-3 py-2">Date</th>
               <th className="text-left px-3 py-2">Credit note</th>
               <th className="text-left px-3 py-2">Invoice</th>
-              <th className="text-left px-3 py-2">Branch</th>
               <th className="text-left px-3 py-2">Customer</th>
               <th className="text-left px-3 py-2">Raised by</th>
               <th className="text-left px-3 py-2">Journal</th>
@@ -300,9 +299,6 @@ export default function CreditNotesPage() {
                     </td>
                     <td className="px-3 py-2 text-slate-500">{r.sale_ref || "-"}</td>
                     <td className="px-3 py-2 text-slate-500">
-                      {r.processed_store_id || r.store_id || "-"}
-                    </td>
-                    <td className="px-3 py-2 text-slate-500">
                       {r.customer_name || "Walk-in"}
                     </td>
                     <td className="px-3 py-2 text-slate-500 text-xs">
@@ -318,7 +314,7 @@ export default function CreditNotesPage() {
 
                   {open && (
                     <tr className="bg-slate-50">
-                      <td colSpan={8} className="px-4 py-3">
+                      <td colSpan={7} className="px-4 py-3">
                         {r.reason && (
                           <p className="text-sm text-slate-600 mb-3">
                             <span className="text-slate-400">Reason: </span>
@@ -379,14 +375,14 @@ export default function CreditNotesPage() {
 
             {!loading && visible.length === 0 && (
               <tr>
-                <td colSpan={8} className="text-center text-slate-400 py-12">
+                <td colSpan={7} className="text-center text-slate-400 py-12">
                   No credit notes in this period
                 </td>
               </tr>
             )}
             {loading && (
               <tr>
-                <td colSpan={8} className="text-center text-slate-400 py-12">
+                <td colSpan={7} className="text-center text-slate-400 py-12">
                   …
                 </td>
               </tr>
