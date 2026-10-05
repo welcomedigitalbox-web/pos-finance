@@ -68,6 +68,9 @@ export default function FinanceUsersPage() {
 
   const [rows, setRows] = useState<FinUserRow[]>([]);
   const [scopes, setScopes] = useState<Record<string, string[]>>({});
+  // What each finance role opens on its own, read from org_role_pages so
+  // the screen and the sign-in agree about where access comes from.
+  const [rolePages, setRolePages] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState("");
@@ -102,11 +105,19 @@ export default function FinanceUsersPage() {
 
   async function load() {
     setLoading(true);
-    const [userRes, scopeRes] = await Promise.all([
+    const [userRes, roleRes, scopeRes] = await Promise.all([
       supabase.from("fin_users").select("*").order("created_at", { ascending: false }),
+      supabase.from("org_role_pages").select("role_key,page_key").eq("app", "finance"),
       supabase.from("fin_user_stores").select("user_id,store_id"),
     ]);
     setRows((userRes.data as FinUserRow[]) || []);
+
+    const byRole: Record<string, string[]> = {};
+    for (const r of (roleRes.data as { role_key: string; page_key: string }[]) || []) {
+      (byRole[r.role_key] ||= []).push(r.page_key);
+    }
+    setRolePages(byRole);
+
     const map: Record<string, string[]> = {};
     for (const r of (scopeRes.data as { user_id: string; store_id: string }[]) || []) {
       (map[r.user_id] ||= []).push(r.store_id);
@@ -296,9 +307,22 @@ export default function FinanceUsersPage() {
     return ids.map(storeName).join(", ");
   }
 
+  // A per-user count of 0 used to read as "this person can open nothing",
+  // which was never true — their role already opens pages for them. The
+  // list now says where the access comes from.
   function pageCount(u: FinUserRow) {
     if (FULL_ACCESS.includes(u.role)) return t("fin_all");
-    return String((u.permissions || []).length);
+    const byRole = rolePages[u.role]?.length ?? 0;
+    const extra = (u.permissions || []).filter((k) => !rolePages[u.role]?.includes(k)).length;
+    if (!byRole && !extra) return "0";
+    return (
+      <span className="whitespace-nowrap">
+        {byRole + extra}
+        <span className="text-xs text-slate-400 ml-1">
+          ({byRole} {t("fin_userRole").toLowerCase()}{extra ? ` + ${extra}` : ""})
+        </span>
+      </span>
+    );
   }
 
   return (
@@ -505,19 +529,31 @@ export default function FinanceUsersPage() {
                 </p>
               )}
               <div className="mt-2 grid gap-1.5 sm:grid-cols-2 border border-slate-200 rounded-xl p-3">
-                {SELECTABLE_PAGES.map((p) => (
-                  <label
-                    key={p.key}
-                    className={`flex items-center gap-2 text-sm ${draftFullAccess ? "text-slate-400" : ""}`}>
-                    <input
-                      type="checkbox"
-                      disabled={draftFullAccess}
-                      checked={draftFullAccess || draft.permissions.includes(p.key)}
-                      onChange={() => togglePage(p.key)}
-                    />
-                    {t(p.labelKey as TranslationKey)}
-                  </label>
-                ))}
+                {SELECTABLE_PAGES.map((p) => {
+                  // A page the role already opens is ticked and left alone:
+                  // unticking it here would not take it away, so offering
+                  // that would be a lie about what the box does.
+                  const fromRole = !!rolePages[draft.role]?.includes(p.key);
+                  const locked = draftFullAccess || fromRole;
+                  return (
+                    <label
+                      key={p.key}
+                      className={`flex items-center gap-2 text-sm ${locked ? "text-slate-400" : ""}`}>
+                      <input
+                        type="checkbox"
+                        disabled={locked}
+                        checked={locked || draft.permissions.includes(p.key)}
+                        onChange={() => togglePage(p.key)}
+                      />
+                      {t(p.labelKey as TranslationKey)}
+                      {fromRole && !draftFullAccess && (
+                        <span className="text-[11px] text-slate-400">
+                          ({roleLabel(draft.role)})
+                        </span>
+                      )}
+                    </label>
+                  );
+                })}
               </div>
             </div>
 
