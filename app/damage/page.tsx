@@ -45,6 +45,7 @@ type Filed = {
   value: number;
   received_by: string | null;
   reject_reason: string | null;
+  reported_by: string | null;
 };
 
 const REASONS = [
@@ -60,10 +61,11 @@ const num = (n: number) =>
   new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(Math.round(n || 0));
 
 const STATUS_LABEL: Record<string, string> = {
-  pending: "Waiting for the warehouse",
+  pending: "Waiting for approval",
+  approved_now: "Approved — waiting for the warehouse",
   received: "Received by the warehouse",
   rejected: "Rejected",
-  approved: "Approved (old record)",
+  approved: "Approved — waiting for the warehouse",
 };
 
 export default function FinanceDamagePage() {
@@ -80,11 +82,14 @@ export default function FinanceDamagePage() {
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [filed, setFiled] = useState<Filed[]>([]);
+  const [canApprove, setCanApprove] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
   const scanRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null));
     supabase.rpc("can_file_damage").then(({ data }) => setAllowed(!!data));
+    supabase.rpc("can_approve_damage").then(({ data }) => setCanApprove(!!data));
     supabase
       .from("stores")
       .select("id, name")
@@ -95,7 +100,7 @@ export default function FinanceDamagePage() {
   const loadFiled = useCallback(async () => {
     const { data, error } = await supabase
       .from("stock_damages")
-      .select("damage_no, store_id, status, created_at, qty, unit_cost, warehouse_approved_by, reject_reason")
+      .select("damage_no, store_id, status, created_at, qty, unit_cost, warehouse_approved_by, reject_reason, reported_by, product_id")
       .order("created_at", { ascending: false })
       .limit(1000);
     if (error) return;
@@ -114,6 +119,7 @@ export default function FinanceDamagePage() {
           value: 0,
           received_by: r.warehouse_approved_by,
           reject_reason: r.reject_reason,
+          reported_by: r.reported_by,
         };
         byNo.set(no, g);
       }
@@ -260,9 +266,40 @@ export default function FinanceDamagePage() {
     if (error) return setErr(error.message);
     setLines([]);
     setNote("");
-    setMsg(`${data} sent to the warehouse. Stock comes off when they receive it.`);
+    setMsg(`${data} filed. It goes to the warehouse once it is approved.`);
     loadFiled();
     scanRef.current?.focus();
+  }
+
+  const waiting = useMemo(
+    () => filed.filter((f) => f.status === "pending"),
+    [filed]
+  );
+
+  async function approve(no: string) {
+    setErr(null);
+    setMsg(null);
+    setBusy(no);
+    const { error } = await supabase.rpc("approve_stock_damage", { p_damage_no: no });
+    setBusy(null);
+    if (error) return setErr(error.message);
+    setMsg(`${no} approved — the warehouse can take it in now`);
+    loadFiled();
+  }
+
+  async function refuse(no: string) {
+    const why = window.prompt("Why is this being refused?");
+    if (!why) return;
+    setErr(null);
+    setBusy(no);
+    const { error } = await supabase.rpc("reject_stock_damage", {
+      p_damage_no: no,
+      p_reason: why,
+    });
+    setBusy(null);
+    if (error) return setErr(error.message);
+    setMsg(`${no} refused — nothing moved`);
+    loadFiled();
   }
 
   if (allowed === null) {
@@ -287,8 +324,8 @@ export default function FinanceDamagePage() {
         Report damage
       </h1>
       <p className="mt-1 text-sm text-gray-500">
-        Scan the damaged pieces and send them to the warehouse. Stock comes off
-        when the warehouse receives them, not now.
+        Scan the damaged pieces and file them. They go to the warehouse once
+        approved, and stock comes off when the warehouse receives them.
       </p>
 
       {err && (
@@ -443,14 +480,62 @@ export default function FinanceDamagePage() {
           disabled={saving || !lines.length || !store}
           className="rounded bg-blue-600 px-4 py-2 text-white text-sm font-medium disabled:opacity-40"
         >
-          {saving ? "Sending…" : "Send to warehouse"}
+          {saving ? "Filing…" : "File damage"}
         </button>
         <span className="text-xs text-gray-500">
-          Nothing comes off stock until the warehouse receives it.
+          Needs approval before the warehouse sees it. Nothing comes off stock
+          until they receive it.
         </span>
       </div>
 
       {/* ------------------------------------------------------------ */}
+      {canApprove && waiting.length > 0 && (
+        <>
+          <h2 className="mt-10 text-base font-semibold">
+            Waiting for your approval ({waiting.length})
+          </h2>
+          <p className="mt-1 text-xs text-gray-500">
+            A damage is a loss. Nothing reaches the warehouse until it is signed.
+          </p>
+          <div className="mt-3 space-y-2">
+            {waiting.map((w) => (
+              <div
+                key={w.damage_no}
+                className="border rounded p-3 flex flex-wrap items-center justify-between gap-3"
+              >
+                <div>
+                  <div className="font-mono font-medium">{w.damage_no}</div>
+                  <div className="text-xs text-gray-500">
+                    {w.store_id} · {w.reported_by || "—"} ·{" "}
+                    {new Date(w.created_at).toLocaleDateString()}
+                  </div>
+                </div>
+                <div className="text-sm text-right">
+                  <div>{num(w.qty)} pcs · {w.lines} lines</div>
+                  <div className="text-xs text-gray-500">{num(w.value)} at cost</div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => approve(w.damage_no)}
+                    disabled={busy === w.damage_no}
+                    className="rounded bg-green-600 px-3 py-1.5 text-white text-sm disabled:opacity-40"
+                  >
+                    {busy === w.damage_no ? "…" : "Approve"}
+                  </button>
+                  <button
+                    onClick={() => refuse(w.damage_no)}
+                    disabled={busy === w.damage_no}
+                    className="rounded border border-red-200 px-3 py-1.5 text-sm text-red-700 disabled:opacity-40"
+                  >
+                    Refuse
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
       <h2 className="mt-10 text-base font-semibold">Filed recently</h2>
       <p className="mt-1 text-xs text-gray-500">
         What has been sent and whether the warehouse has taken it in.
