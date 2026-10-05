@@ -24,6 +24,7 @@ export type PageKey =
   | "fin-trial-balance"
   | "fin-accounts"
   | "fin-import"
+  | "fin-damage"
   | "fin-users";
 
 export type FinanceRole = "fin_admin" | "fin_manager" | "accountant" | "viewer";
@@ -58,6 +59,7 @@ export const PAGE_OPTIONS: { key: PageKey; href: string; labelKey: string; group
   { key: "fin-pl", href: "/pl", labelKey: "nav_finPL", group: "books" },
   { key: "fin-closing", href: "/closing", labelKey: "nav_finClosing", group: "entry" },
   { key: "fin-transfers", href: "/transfers", labelKey: "nav_finTransfers", group: "entry" },
+  { key: "fin-damage", href: "/damage", labelKey: "nav_finDamage", group: "entry" },
   { key: "fin-methods", href: "/methods", labelKey: "nav_finMethods", group: "setup" },
   { key: "fin-import", href: "/import", labelKey: "nav_finImport", group: "setup" },
   { key: "fin-users", href: "/users", labelKey: "nav_finUsers", group: "setup" },
