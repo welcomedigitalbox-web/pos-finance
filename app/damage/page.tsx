@@ -23,8 +23,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { useAuth } from "../auth-context";
-import { useLanguage } from "../language-context";
 
 type Line = {
   key: string;
@@ -69,8 +67,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export default function FinanceDamagePage() {
-  const { user } = useAuth();
-  const { lang } = useLanguage();
+  const [email, setEmail] = useState<string | null>(null);
 
   const [allowed, setAllowed] = useState<boolean | null>(null);
   const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
@@ -86,6 +83,7 @@ export default function FinanceDamagePage() {
   const scanRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null));
     supabase.rpc("can_file_damage").then(({ data }) => setAllowed(!!data));
     supabase
       .from("stores")
@@ -286,7 +284,7 @@ export default function FinanceDamagePage() {
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto">
       <h1 className="text-xl font-semibold">
-        {lang === "mm" ? "ပျက်စီးမှု တင်ပြခြင်း" : "Report damage"}
+        Report damage
       </h1>
       <p className="mt-1 text-sm text-gray-500">
         Scan the damaged pieces and send them to the warehouse. Stock comes off
@@ -319,7 +317,7 @@ export default function FinanceDamagePage() {
           </select>
         </label>
         <div className="text-sm text-gray-500 pb-2">
-          Reported by {user?.email || "—"}
+          Reported by {email || "—"}
         </div>
       </div>
 
