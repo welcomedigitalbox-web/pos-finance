@@ -34,6 +34,9 @@ type PaymentRow = {
   amount: number;
   discount_amount: number;
   unallocated: number;
+  voided_at: string | null;
+  voided_by: string | null;
+  void_reason: string | null;
   reference: string | null;
   note: string | null;
 };
@@ -143,6 +146,21 @@ export default function FinancePaymentsPage() {
     })();
     return () => { live = false; };
   }, [search]);
+
+  // A wrong payment is reversed, never edited: the original and the
+  // correction both have to stay on the record.
+  async function voidPayment(row: PaymentRow) {
+    const reason = window.prompt("Why is this payment being reversed?");
+    if (reason === null) return;
+    if (!reason.trim()) return showToast("Say why it is being reversed");
+    const { error } = await supabase.rpc("fin_void_payment", {
+      p_id: row.id, p_reason: reason.trim(),
+    });
+    if (error) return showToast("\u274c " + errorText(error));
+    showToast(row.payment_no + " reversed");
+    setDetail(null);
+    await load();
+  }
 
   function showToast(msg: string) {
     setToast(msg);
@@ -441,7 +459,16 @@ export default function FinancePaymentsPage() {
                 className="border-t border-slate-100 cursor-pointer hover:bg-slate-50"
               >
                 <td className="px-3 py-2">{r.payment_date}</td>
-                <td className="px-3 py-2 font-mono text-xs">{r.payment_no}</td>
+                <td className="px-3 py-2 font-mono text-xs">
+                  <span className={r.voided_at ? "line-through text-slate-400" : ""}>
+                    {r.payment_no}
+                  </span>
+                  {r.voided_at && (
+                    <span className="ml-2 px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px]">
+                      reversed
+                    </span>
+                  )}
+                </td>
                 <td className="px-3 py-2">
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                     r.direction === "in" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
@@ -503,6 +530,12 @@ export default function FinancePaymentsPage() {
               </div>
             </div>
 
+            {detail.voided_at && (
+              <div className="bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-600 mb-3">
+                Reversed on {new Date(detail.voided_at).toLocaleString()} by {detail.voided_by}
+                {detail.void_reason ? ` \u00b7 ${detail.void_reason}` : ""}
+              </div>
+            )}
             {detail.reference && (
               <p className="text-sm text-slate-600 mb-2">
                 {t("fin_reference")}: {detail.reference}
@@ -540,12 +573,20 @@ export default function FinancePaymentsPage() {
               </table>
             </div>
 
-            <button
-              onClick={() => setDetail(null)}
-              className="w-full mt-5 py-2.5 border border-slate-200 rounded-lg text-sm font-medium"
-            >
-              {t("fin_cancel")}
-            </button>
+            <div className="flex gap-2 mt-5">
+              {!detail.voided_at && (
+                <button onClick={() => voidPayment(detail)}
+                  className="flex-1 py-2.5 border border-red-200 text-red-700 rounded-lg text-sm font-medium">
+                  Reverse this payment
+                </button>
+              )}
+              <button
+                onClick={() => setDetail(null)}
+                className="flex-1 py-2.5 border border-slate-200 rounded-lg text-sm font-medium"
+              >
+                {t("fin_cancel")}
+              </button>
+            </div>
           </div>
         </div>
       )}
