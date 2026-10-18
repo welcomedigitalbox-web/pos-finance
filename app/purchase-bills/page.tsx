@@ -66,6 +66,12 @@ export default function FinancePurchaseBillsPage() {
   const [open, setOpen] = useState<Bill | null>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [billing, setBilling] = useState<Billing | null>(null);
+  // The supplier's own paperwork, attached to the order by merchandising.
+  // Finance is the one paying, so finance is the one who has to be able to
+  // read it before approving.
+  const [docs, setDocs] = useState<
+    { id: string; kind: string; title: string | null; file_path: string; created_at: string }[]
+  >([]);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -121,6 +127,7 @@ export default function FinancePurchaseBillsPage() {
     setNote("");
     setItems([]);
     setBilling(null);
+    setDocs([]);
     const [{ data: its }, { data: bill }] = await Promise.all([
       supabase
         .from("purchase_invoice_items")
@@ -133,6 +140,25 @@ export default function FinancePurchaseBillsPage() {
     ]);
     setItems((its as Item[]) || []);
     setBilling((bill as Billing) || null);
+
+    if (b.po_id) {
+      const { data: dc } = await supabase
+        .from("po_documents")
+        .select("id,kind,title,file_path,created_at")
+        .eq("po_id", b.po_id)
+        .order("created_at", { ascending: false });
+      setDocs((dc as typeof docs) || []);
+    }
+  }
+
+  // The files live in a private bucket, so they are opened through a link
+  // that expires rather than a public address anyone could pass around.
+  async function openDoc(path: string) {
+    const { data, error } = await supabase.storage
+      .from("po-docs")
+      .createSignedUrl(path, 3600);
+    if (error || !data?.signedUrl) return showToast("\u274c " + (error?.message || "Cannot open"));
+    window.open(data.signedUrl, "_blank", "noopener");
   }
 
   async function approve() {
@@ -293,6 +319,33 @@ export default function FinancePurchaseBillsPage() {
                   <div className="text-slate-500">Already billed</div>
                   <div className="font-semibold">{fmtMMK(billing.billed_value)}</div>
                 </div>
+              </div>
+            )}
+
+            {docs.length > 0 && (
+              <div className="border border-slate-200 rounded-lg px-3 py-2 mb-4">
+                <div className="text-xs text-slate-500 mb-1.5">
+                  Supplier paperwork on the order
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {docs.map((d) => (
+                    <button
+                      key={d.id}
+                      onClick={() => openDoc(d.file_path)}
+                      className="border border-slate-200 rounded-lg px-2 py-1 text-xs bg-white hover:border-blue-300"
+                    >
+                      📎 {d.title || d.kind}
+                      <span className="text-slate-400"> · {d.kind}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {open.po_id && docs.length === 0 && (
+              <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-3 py-2 mb-4 text-xs">
+                No invoice or delivery note is attached to this order. Ask
+                merchandising to attach the supplier&rsquo;s paperwork before you pay.
               </div>
             )}
 
