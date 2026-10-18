@@ -16,13 +16,40 @@ import { fmtMMK } from "@/lib/finance";
 type Supplier = {
   id: string;
   name: string;
+  company_name: string | null;
+  dica_no: string | null;
+  tax_no: string | null;
   phone: string | null;
   address: string | null;
   email: string | null;
+  website: string | null;
   contact_person: string | null;
-  payment_term: string | null;
+  contact_phone: string | null;
+  payment_terms: string | null;
   is_active: boolean | null;
   note: string | null;
+};
+
+// Where the money actually goes. Finance was reading these off a chat
+// message; they belong beside the bill.
+type Bank = {
+  id: string;
+  supplier_id: string;
+  bank_name: string | null;
+  account_name: string | null;
+  account_no: string | null;
+  branch: string | null;
+  currency: string | null;
+  is_primary: boolean | null;
+};
+
+type Doc = {
+  id: string;
+  supplier_id: string;
+  title: string | null;
+  doc_type: string | null;
+  file_path: string | null;
+  expires_on: string | null;
 };
 
 type Owed = { supplier_id: string; outstanding: number; bills: number };
@@ -33,6 +60,8 @@ export default function FinanceSuppliersPage() {
 
   const [rows, setRows] = useState<Supplier[]>([]);
   const [owed, setOwed] = useState<Record<string, Owed>>({});
+  const [banks, setBanks] = useState<Record<string, Bank[]>>({});
+  const [docs, setDocs] = useState<Record<string, Doc[]>>({});
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState<Supplier | null>(null);
@@ -50,7 +79,7 @@ export default function FinanceSuppliersPage() {
 
   async function load() {
     setLoading(true);
-    const [{ data: sup }, { data: bills }] = await Promise.all([
+    const [{ data: sup }, { data: bills }, { data: bk }, { data: dc }] = await Promise.all([
       supabase.from("suppliers").select("*").order("name"),
       // What is still owed, straight from the bills finance has approved.
       supabase
@@ -58,7 +87,23 @@ export default function FinanceSuppliersPage() {
         .select("supplier_id,total,status")
         .eq("status", "approved")
         .limit(1000),
+      supabase
+        .from("supplier_bank_accounts")
+        .select("id,supplier_id,bank_name,account_name,account_no,branch,currency,is_primary")
+        .order("is_primary", { ascending: false })
+        .limit(1000),
+      supabase
+        .from("supplier_documents")
+        .select("id,supplier_id,title,doc_type,file_path,expires_on")
+        .limit(1000),
     ]);
+
+    const byBank: Record<string, Bank[]> = {};
+    for (const b of ((bk as Bank[]) || [])) (byBank[b.supplier_id] ||= []).push(b);
+    const byDoc: Record<string, Doc[]> = {};
+    for (const d of ((dc as Doc[]) || [])) (byDoc[d.supplier_id] ||= []).push(d);
+    setBanks(byBank);
+    setDocs(byDoc);
 
     const by: Record<string, Owed> = {};
     for (const b of ((bills as { supplier_id: string; total: number }[]) || [])) {
@@ -71,6 +116,14 @@ export default function FinanceSuppliersPage() {
     setRows((sup as Supplier[]) || []);
     setOwed(by);
     setLoading(false);
+  }
+
+  // A private bucket, so the file opens through a link that expires.
+  async function openDoc(path: string) {
+    const { data } = await supabase.storage
+      .from("supplier-docs")
+      .createSignedUrl(path, 3600);
+    if (data?.signedUrl) window.open(data.signedUrl, "_blank", "noopener");
   }
 
   const shown = useMemo(() => {
@@ -108,22 +161,23 @@ export default function FinanceSuppliersPage() {
               <th className="text-left px-3 py-2">Contact</th>
               <th className="text-left px-3 py-2">Phone</th>
               <th className="text-left px-3 py-2">Term</th>
+              <th className="text-left px-3 py-2">Bank</th>
               <th className="text-right px-3 py-2">Approved bills</th>
               <th className="text-right px-3 py-2">Value</th>
+              <th className="px-3 py-2"></th>
             </tr>
           </thead>
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={6} className="text-center text-slate-400 py-8">...</td>
+                <td colSpan={8} className="text-center text-slate-400 py-8">...</td>
               </tr>
             )}
             {!loading &&
               shown.map((s) => (
                 <tr
                   key={s.id}
-                  onClick={() => setOpen(s)}
-                  className={`border-t border-slate-100 cursor-pointer hover:bg-slate-50 ${
+                  className={`border-t border-slate-100 hover:bg-slate-50 ${
                     s.is_active === false ? "opacity-50" : ""
                   }`}
                 >
@@ -135,16 +189,30 @@ export default function FinanceSuppliersPage() {
                   </td>
                   <td className="px-3 py-2 text-slate-500">{s.contact_person || "-"}</td>
                   <td className="px-3 py-2 text-slate-500">{s.phone || "-"}</td>
-                  <td className="px-3 py-2 text-slate-500">{s.payment_term || "-"}</td>
+                  <td className="px-3 py-2 text-slate-500">{s.payment_terms || "-"}</td>
+                  <td className="px-3 py-2 text-slate-500">
+                    {banks[s.id]?.[0]
+                      ? `${banks[s.id][0].bank_name || ""} ${banks[s.id][0].account_no || ""}`.trim()
+                      : "-"}
+                  </td>
                   <td className="px-3 py-2 text-right">{owed[s.id]?.bills ?? 0}</td>
                   <td className="px-3 py-2 text-right">
                     {owed[s.id] ? fmtMMK(owed[s.id].outstanding) : "-"}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <button
+                      type="button"
+                      onClick={() => setOpen(s)}
+                      className="text-blue-600 text-xs font-medium"
+                    >
+                      Details
+                    </button>
                   </td>
                 </tr>
               ))}
             {!loading && shown.length === 0 && (
               <tr>
-                <td colSpan={6} className="text-center text-slate-400 py-8">
+                <td colSpan={8} className="text-center text-slate-400 py-8">
                   Nothing matches.
                 </td>
               </tr>
@@ -165,11 +233,16 @@ export default function FinanceSuppliersPage() {
             <h3 className="font-semibold text-lg mb-3">{open.name}</h3>
             <dl className="text-sm space-y-2">
               {[
+                ["Registered name", open.company_name],
+                ["DICA no.", open.dica_no],
+                ["Tax / TIN", open.tax_no],
                 ["Contact", open.contact_person],
+                ["Contact phone", open.contact_phone],
                 ["Phone", open.phone],
                 ["Email", open.email],
+                ["Website", open.website],
                 ["Address", open.address],
-                ["Payment term", open.payment_term],
+                ["Payment terms", open.payment_terms],
                 ["Note", open.note],
               ].map(([label, value]) => (
                 <div key={label as string} className="flex gap-3">
@@ -185,6 +258,47 @@ export default function FinanceSuppliersPage() {
                 </dd>
               </div>
             </dl>
+
+            {(banks[open.id] || []).length > 0 && (
+              <div className="mt-4 border-t border-slate-100 pt-3">
+                <div className="text-xs text-slate-500 mb-1.5">Bank accounts</div>
+                {(banks[open.id] || []).map((b) => (
+                  <div key={b.id} className="border border-slate-200 rounded-lg px-3 py-2 mb-2 text-sm">
+                    <div className="font-medium">
+                      {b.bank_name || "-"}
+                      {b.is_primary && (
+                        <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-green-50 text-green-700">
+                          primary
+                        </span>
+                      )}
+                    </div>
+                    <div className="font-mono">{b.account_no || "-"}</div>
+                    <div className="text-xs text-slate-500">
+                      {[b.account_name, b.branch, b.currency].filter(Boolean).join(" · ") || "-"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {(docs[open.id] || []).length > 0 && (
+              <div className="mt-2 border-t border-slate-100 pt-3">
+                <div className="text-xs text-slate-500 mb-1.5">Documents</div>
+                <div className="flex flex-wrap gap-2">
+                  {(docs[open.id] || []).map((d) => (
+                    <button
+                      key={d.id}
+                      type="button"
+                      onClick={() => d.file_path && openDoc(d.file_path)}
+                      className="border border-slate-200 rounded-lg px-2 py-1 text-xs bg-white hover:border-blue-300"
+                    >
+                      📎 {d.title || d.doc_type}
+                      {d.expires_on && <span className="text-slate-400"> · to {d.expires_on}</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <button
               onClick={() => setOpen(null)}
