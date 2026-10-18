@@ -17,6 +17,8 @@ export type PageKey =
   | "fin-receivables"
   | "fin-payables"
   | "fin-suppliers"
+  | "fin-purchase-orders"
+  | "fin-costing"
   | "fin-refunds"
   | "fin-invoice-fixes"
   | "fin-purchase-bills"
@@ -55,6 +57,8 @@ export const PAGE_OPTIONS: { key: PageKey; href: string; labelKey: string; group
   { key: "fin-payables", href: "/payables", labelKey: "nav_finPayables", group: "outstanding" },
   { key: "fin-purchase-bills", href: "/purchase-bills", labelKey: "nav_finPurchaseBills", group: "outstanding" },
   { key: "fin-suppliers", href: "/suppliers", labelKey: "nav_finSuppliers", group: "outstanding" },
+  { key: "fin-purchase-orders", href: "/purchase-orders", labelKey: "nav_finPurchaseOrders", group: "outstanding" },
+  { key: "fin-costing", href: "/costing", labelKey: "nav_finCosting", group: "books" },
   { key: "fin-refunds", href: "/refunds", labelKey: "nav_finRefunds", group: "outstanding" },
   { key: "fin-invoice-fixes", href: "/invoice-fixes", labelKey: "nav_finInvoiceFixes", group: "outstanding" },
   { key: "fin-cashbook", href: "/cashbook", labelKey: "nav_finCashbook", group: "books" },
